@@ -156,6 +156,18 @@ fn candidates(a: &SongAnalysis) -> Vec<Candidate> {
 
 /// Chooses the rows of a chart (no arrows yet).
 pub fn place_notes(a: &SongAnalysis, model: &Model, d: Difficulty, rng: &mut ChaCha8Rng) -> Vec<Note> {
+    place_notes_scaled(a, model, d, 1.0, rng)
+}
+
+/// [`place_notes`] with the number of rows multiplied by `density` (style — snaps,
+/// jumps, holds — unchanged). Used to aim at a given meter.
+pub fn place_notes_scaled(
+    a: &SongAnalysis,
+    model: &Model,
+    d: Difficulty,
+    density: f64,
+    rng: &mut ChaCha8Rng,
+) -> Vec<Note> {
     let stats = model.stats(d);
     let grid = &a.grid;
     let (start, end) = active_range(&a.mix, a.duration);
@@ -194,7 +206,7 @@ pub fn place_notes(a: &SongAnalysis, model: &Model, d: Difficulty, rng: &mut Cha
     let active = (end - start).max(1.0);
     let onset_rate = a.mix.onsets.iter().filter(|o| o.0 >= start && o.0 <= end).count() as f64 / active;
     let intensity = (onset_rate / 5.0).sqrt().clamp(0.8, 1.25);
-    let target = (stats.nps.p50 * intensity * active).round().max(4.0) as usize;
+    let target = (stats.nps.p50 * intensity * active * density).round().max(4.0) as usize;
 
     // Allowed subdivisions and their weights come from the human charts.
     let snaps = stats.snaps;
@@ -530,6 +542,15 @@ pub fn to_rows(notes: &[Note], masks: &[u8]) -> Vec<(u32, [Cell; 4])> {
 
 /// Meter from the density of the generated chart, within the human range of the slot.
 pub fn estimate_meter(rows: &[(u32, [Cell; 4])], grid: &Grid, model: &Model, d: Difficulty) -> u32 {
+    let s = model.stats(d);
+    raw_meter(rows, grid, model)
+        .round()
+        .clamp(s.meter.p10.max(1.0), s.meter.p90.max(1.0)) as u32
+}
+
+/// Meter predicted by the learned fit from the density of the busiest measures
+/// (no clamping).
+pub fn raw_meter(rows: &[(u32, [Cell; 4])], grid: &Grid, model: &Model) -> f64 {
     let note_rows: Vec<NoteRow> = rows
         .iter()
         .map(|(p, c)| NoteRow {
@@ -538,10 +559,120 @@ pub fn estimate_meter(rows: &[(u32, [Cell; 4])], grid: &Grid, model: &Model, d: 
         })
         .collect();
     let timing = Timing::constant(grid.bpm, grid.offset());
-    let f = ChartFeatures::compute(&note_rows, &timing, &Layout::dance_single());
-    let s = model.stats(d);
-    let m = model.meter_for(f.measure_nps_p75).round();
-    m.clamp(s.meter.p10.max(1.0), s.meter.p90.max(1.0)) as u32
+    let f = ChartFeatures::compute_density(&note_rows, &timing);
+    model.meter_for(f)
+}
+
+/// Meters that can be requested (the range of the ITGmania difficulty scale used here).
+pub const METER_RANGE: std::ops::RangeInclusive<u32> = 1..=10;
+
+/// The difficulty whose human charts are typically closest to `meter` (ties: the
+/// easier one). Its style (snaps, jumps, holds, arrow patterns) is used for the chart.
+pub fn style_for_meter(model: &Model, meter: u32) -> Difficulty {
+    let mut best = Difficulty::Beginner;
+    for d in Difficulty::ALL {
+        let dist = |d: Difficulty| (model.stats(d).meter.p50 - meter as f64).abs();
+        if dist(d) < dist(best) - 1e-9 {
+            best = d;
+        }
+    }
+    best
+}
+
+/// Puts each requested meter in its own difficulty slot (the game shows one chart per
+/// slot), in increasing order, preferring the slot whose human charts have the closest
+/// meter. At most 5 meters.
+pub fn assign_slots(model: &Model, meters: &[u32]) -> anyhow::Result<Vec<(Difficulty, u32)>> {
+    let mut meters = meters.to_vec();
+    meters.sort();
+    meters.dedup();
+    anyhow::ensure!(!meters.is_empty(), "no meter requested");
+    anyhow::ensure!(
+        meters.len() <= Difficulty::ALL.len(),
+        "at most {} meters (one per difficulty slot), got {}",
+        Difficulty::ALL.len(),
+        meters.len()
+    );
+    if let Some(m) = meters.iter().find(|m| !METER_RANGE.contains(m)) {
+        anyhow::bail!(
+            "meter {m} out of range {}..={}",
+            METER_RANGE.start(),
+            METER_RANGE.end()
+        );
+    }
+    let n = meters.len();
+    let mut out = Vec::with_capacity(n);
+    let mut next = 0usize;
+    for (i, &m) in meters.iter().enumerate() {
+        let preferred = style_for_meter(model, m).index();
+        // Leave enough slots for the remaining (harder) meters.
+        let latest = Difficulty::ALL.len() - (n - i);
+        let slot = preferred.clamp(next, latest);
+        out.push((Difficulty::ALL[slot], m));
+        next = slot + 1;
+    }
+    Ok(out)
+}
+
+/// Generates a chart aiming at `meter`: the style of [`style_for_meter`], and a
+/// density found by bisection so that the busiest measures are as dense as in human
+/// charts rated `meter` ([`Model::density_for_meter`]). The chart is labelled with
+/// the `slot` difficulty. The written meter is the target when it is reached, else
+/// the closest one (e.g. a calm song cannot reach a high meter).
+pub fn generate_for_meter(
+    a: &SongAnalysis,
+    model: &Model,
+    slot: Difficulty,
+    meter: u32,
+    seed: u64,
+    opts: &GenOptions,
+) -> OutChart {
+    let style = style_for_meter(model, meter);
+    let salt = slot.seed_salt() ^ (meter as u64).wrapping_mul(0xD1B5_4A32_D192_ED03);
+    let base = ChaCha8Rng::seed_from_u64(seed ^ salt);
+    // The meter only depends on where the rows are, not on the arrows: search on the
+    // placement alone, each try from the same RNG state (deterministic).
+    let timing = Timing::constant(a.grid.bpm, a.grid.offset());
+    let place = |density: f64| {
+        let mut rng = base.clone();
+        let notes = place_notes_scaled(a, model, style, density, &mut rng);
+        let rows: Vec<NoteRow> = notes
+            .iter()
+            .map(|n| NoteRow {
+                beat: n.pos as f64 / ROWS_PER_BEAT as f64,
+                cells: vec![Cell::Tap],
+            })
+            .collect();
+        let d = ChartFeatures::compute_density(&rows, &timing);
+        (d, notes, rng)
+    };
+    let target = model.density_for_meter(meter);
+    let (mut lo, mut hi) = (0.02f64, 6.0f64);
+    let mut best = place(1.0);
+    for _ in 0..14 {
+        let mid = (lo * hi).sqrt();
+        let tried = place(mid);
+        if (tried.0 - target).abs() < (best.0 - target).abs() {
+            best = tried.clone();
+        }
+        if tried.0 < target {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    let (density, notes, mut rng) = best;
+    let repeats = find_repeats(a, &notes, opts.repeat_similarity);
+    let table = model.table(style);
+    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, &mut rng);
+    let rows = to_rows(&notes, &masks);
+    let written = model.meter_for_density(density);
+    OutChart {
+        difficulty: slot.name().to_string(),
+        meter: written,
+        description: format!("itg-charter seed {seed}"),
+        rows,
+    }
 }
 
 /// Generates one chart. The RNG is derived from the seed and the difficulty only, so a

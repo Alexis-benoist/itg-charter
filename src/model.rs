@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const MODEL_VERSION: u32 = 3;
+pub const MODEL_VERSION: u32 = 4;
 pub const GAP_BUCKETS: usize = 6;
 pub const MASKS: usize = 16;
 pub const SNAP_CLASSES: usize = 6;
@@ -131,8 +131,69 @@ pub struct Model {
     /// How many songs human charters set at each tempo (the song's main BPM), as a
     /// histogram of log2(BPM); used to pick the tempo octave. See `BPM_PRIOR_*`.
     pub bpm_counts: Vec<f64>,
+    /// `meter_density[m - 1]`: median over human charts rated `m` of their rows per
+    /// second over the charted part (first to last note, empty measures included;
+    /// made non-decreasing; meters with fewer than [`MIN_CHARTS_PER_METER`] charts are
+    /// interpolated). Used to aim at a requested meter.
+    pub meter_density: Vec<f64>,
     #[serde(skip)]
     smoothed_prior: std::sync::OnceLock<Vec<f64>>,
+}
+
+/// Meters covered by `meter_density`.
+pub const MAX_METER: usize = 20;
+/// Charts needed for a meter to get its own median in `meter_density`.
+pub const MIN_CHARTS_PER_METER: usize = 20;
+
+/// Median density per meter from (measure_nps_p75, meter) points, see `meter_density`.
+fn meter_density_table(points: &[(f64, f64)]) -> Vec<f64> {
+    let mut known: Vec<Option<f64>> = (1..=MAX_METER)
+        .map(|m| {
+            let v: Vec<f64> = points
+                .iter()
+                .filter(|p| p.1.round() as usize == m)
+                .map(|p| p.0)
+                .collect();
+            (v.len() >= MIN_CHARTS_PER_METER).then(|| Quantiles::of(&v).p50)
+        })
+        .collect();
+    // Non-decreasing: a harder meter never asks for fewer notes.
+    let mut run = 0.0f64;
+    for v in known.iter_mut().flatten() {
+        run = run.max(*v);
+        *v = run;
+    }
+    let idx: Vec<usize> = (0..MAX_METER).filter(|&i| known[i].is_some()).collect();
+    if idx.is_empty() {
+        return vec![0.0; MAX_METER];
+    }
+    (0..MAX_METER)
+        .map(|i| {
+            if let Some(v) = known[i] {
+                return v;
+            }
+            // Linear interpolation between known neighbours, flat extrapolation below,
+            // slope of the last known segment above.
+            let below = idx.iter().rev().find(|&&j| j < i).copied();
+            let above = idx.iter().find(|&&j| j > i).copied();
+            match (below, above) {
+                (Some(b), Some(a)) => {
+                    let (vb, va) = (known[b].unwrap(), known[a].unwrap());
+                    vb + (va - vb) * (i - b) as f64 / (a - b) as f64
+                }
+                (None, Some(a)) => known[a].unwrap(),
+                (Some(b), None) => {
+                    let vb = known[b].unwrap();
+                    let slope = match idx.iter().rev().nth(1) {
+                        Some(&p) => (vb - known[p].unwrap()) / (b - p) as f64,
+                        None => 0.0,
+                    };
+                    vb + slope * (i - b) as f64
+                }
+                (None, None) => 0.0,
+            }
+        })
+        .collect()
 }
 
 fn ngram_index(d: usize, g: usize, p2: usize, p1: usize, cur: usize) -> usize {
@@ -196,29 +257,54 @@ impl ChartFeatures {
         f.hold_ratio /= f.rows as f64;
         let span = seconds.last().unwrap() - seconds[0];
         f.nps = if span > 0.0 { f.rows as f64 / span } else { 0.0 };
-        // Per-measure density, over measures that have notes.
-        let mut per_measure: Vec<(u32, usize)> = Vec::new();
-        for &(_, pos) in &f.sequence {
-            let m = pos / 192;
-            match per_measure.last_mut() {
-                Some((lm, n)) if *lm == m => *n += 1,
-                _ => per_measure.push((m, 1)),
-            }
-        }
-        let densities: Vec<f64> = per_measure
-            .iter()
-            .map(|&(m, n)| {
-                let len = timing.seconds((m + 1) as f64 * 4.0) - timing.seconds(m as f64 * 4.0);
-                if len > 0.0 { n as f64 / len } else { 0.0 }
-            })
-            .collect();
-        f.measure_nps_p75 = Quantiles::of(&densities).p75;
+        f.measure_nps_p75 = measure_nps_p75(f.sequence.iter().map(|s| s.1), timing);
         let mut prows = parity::rows_from_chart(rows, timing, 4);
         if parity::analyze(layout, &mut prows).is_some() {
             f.tech = Some(TechCounts::from_rows(layout, &prows));
         }
         f
     }
+
+    /// Only `nps` (rows per second from the first to the last note, what
+    /// `meter_density` is based on), without the parity analysis: cheap enough to be
+    /// called many times while searching a density.
+    pub fn compute_density(rows: &[NoteRow], timing: &Timing) -> f64 {
+        let seconds: Vec<f64> = rows
+            .iter()
+            .filter(|r| {
+                r.cells
+                    .iter()
+                    .take(4)
+                    .any(|c| matches!(c, Cell::Tap | Cell::Lift | Cell::HoldHead | Cell::RollHead))
+            })
+            .map(|r| timing.seconds(r.beat))
+            .collect();
+        match (seconds.first(), seconds.last()) {
+            (Some(a), Some(b)) if b > a => seconds.len() as f64 / (b - a),
+            _ => 0.0,
+        }
+    }
+}
+
+/// 75th percentile of the rows per second of the measures that have notes.
+/// `positions` are row positions in 48ths of a beat, in increasing order.
+fn measure_nps_p75(positions: impl Iterator<Item = u32>, timing: &Timing) -> f64 {
+    let mut per_measure: Vec<(u32, usize)> = Vec::new();
+    for pos in positions {
+        let m = pos / 192;
+        match per_measure.last_mut() {
+            Some((lm, n)) if *lm == m => *n += 1,
+            _ => per_measure.push((m, 1)),
+        }
+    }
+    let densities: Vec<f64> = per_measure
+        .iter()
+        .map(|&(m, n)| {
+            let len = timing.seconds((m + 1) as f64 * 4.0) - timing.seconds(m as f64 * 4.0);
+            if len > 0.0 { n as f64 / len } else { 0.0 }
+        })
+        .collect();
+    Quantiles::of(&densities).p75
 }
 
 /// Finds simfiles below `dir`, preferring `.ssc` over `.sm` in the same folder. Sorted.
@@ -273,6 +359,7 @@ impl Model {
         let mut per_diff: Vec<Vec<ChartFeatures>> = vec![Vec::new(); NDIFF];
         let mut meters: Vec<Vec<f64>> = vec![Vec::new(); NDIFF];
         let mut fit_points = Vec::new();
+        let mut nps_points = Vec::new();
         let mut main_bpms = Vec::new();
         for (i, path) in files.iter().enumerate() {
             progress(i, files.len());
@@ -312,6 +399,7 @@ impl Model {
                 if chart.meter > 0 {
                     meters[d].push(chart.meter as f64);
                     fit_points.push((f.measure_nps_p75, chart.meter as f64));
+                    nps_points.push((f.nps, chart.meter as f64));
                 }
                 per_diff[d].push(f);
             }
@@ -329,6 +417,7 @@ impl Model {
             meter_intercept,
             meter_slope,
             bpm_counts: bpm_histogram(&main_bpms),
+            meter_density: meter_density_table(&nps_points),
             smoothed_prior: Default::default(),
         })
     }
@@ -405,6 +494,25 @@ impl Model {
     /// Estimated meter for a chart's busiest-measure density.
     pub fn meter_for(&self, measure_nps_p75: f64) -> f64 {
         self.meter_intercept + self.meter_slope * measure_nps_p75
+    }
+
+    /// Busiest-measure density (75th percentile of per-measure rows per second) of
+    /// human charts rated `meter` (median).
+    pub fn density_for_meter(&self, meter: u32) -> f64 {
+        let i = (meter.max(1) as usize - 1).min(self.meter_density.len().saturating_sub(1));
+        self.meter_density.get(i).copied().unwrap_or(0.0)
+    }
+
+    /// Meter whose human density is closest to `measure_nps_p75` (inverse of
+    /// [`Model::density_for_meter`]).
+    pub fn meter_for_density(&self, measure_nps_p75: f64) -> u32 {
+        (1..=self.meter_density.len() as u32)
+            .min_by(|&a, &b| {
+                let da = (self.density_for_meter(a) - measure_nps_p75).abs();
+                let db = (self.density_for_meter(b) - measure_nps_p75).abs();
+                da.total_cmp(&db).then(a.cmp(&b))
+            })
+            .unwrap_or(1)
     }
 }
 

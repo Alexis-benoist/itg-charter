@@ -5,7 +5,7 @@
 
 use crate::analysis::{AnalysisOptions, SongAnalysis, Stems};
 use crate::audio::decode_file;
-use crate::chart::{GenOptions, generate};
+use crate::chart::{GenOptions, assign_slots, generate, generate_for_meter};
 use crate::difficulty::Difficulty;
 use crate::model::Model;
 use crate::simfile::{SongInfo, Visuals, apply_visuals, render_sm, sanitize};
@@ -23,10 +23,69 @@ pub struct VisualFiles {
     pub bg_video: Option<PathBuf>,
 }
 
+/// Which charts to generate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Charts {
+    /// One chart per difficulty slot, with the typical density of human charts of that
+    /// slot (the meter follows).
+    Slots(Vec<Difficulty>),
+    /// One chart per meter (ITGmania scale, 1–10): the density is tuned to reach the
+    /// meter; the charts fill the slots in increasing order (at most 5).
+    Meters(Vec<u32>),
+}
+
+/// Named sets of meters.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
+pub enum Profile {
+    /// Meters 2, 3, 4, 5: for players who are starting.
+    #[default]
+    Beginner,
+    /// Meters 2, 4, 6, 8, 10: the whole range of the game, one chart per slot.
+    Full,
+}
+
+impl Profile {
+    pub fn meters(self) -> Vec<u32> {
+        match self {
+            Profile::Beginner => vec![2, 3, 4, 5],
+            Profile::Full => vec![2, 4, 6, 8, 10],
+        }
+    }
+}
+
+impl Default for Charts {
+    /// The meters of the default profile.
+    fn default() -> Self {
+        Charts::Meters(Profile::default().meters())
+    }
+}
+
+/// Parses meters like "2-5", "2,4,6" or "1-3,8" (validated by [`assign_slots`]).
+pub fn parse_meters(s: &str) -> Result<Vec<u32>> {
+    let mut out = Vec::new();
+    for part in s.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let parse = |x: &str| {
+            x.trim()
+                .parse::<u32>()
+                .with_context(|| format!("invalid meter {x:?} in {s:?}"))
+        };
+        match part.split_once('-') {
+            Some((a, b)) => {
+                let (a, b) = (parse(a)?, parse(b)?);
+                anyhow::ensure!(a <= b, "invalid meter range {part:?}");
+                out.extend(a..=b);
+            }
+            None => out.push(parse(part)?),
+        }
+    }
+    anyhow::ensure!(!out.is_empty(), "no meter in {s:?}");
+    Ok(out)
+}
+
 /// Options of [`create_song`].
 #[derive(Clone, Debug)]
 pub struct SongOptions {
-    pub difficulties: Vec<Difficulty>,
+    pub charts: Charts,
     pub seed: u64,
     /// Folder in which the song folder is created.
     pub output: PathBuf,
@@ -48,7 +107,7 @@ pub struct SongOptions {
 impl Default for SongOptions {
     fn default() -> Self {
         SongOptions {
-            difficulties: Difficulty::ALL.to_vec(),
+            charts: Charts::default(),
             seed: 0,
             output: PathBuf::from("."),
             bpm: None,
@@ -124,6 +183,14 @@ pub fn create_song(audio_path: &Path, opts: &SongOptions) -> Result<PathBuf> {
         Some(p) => Model::from_json(&std::fs::read_to_string(p)?)?,
         None => Model::embedded()?,
     };
+    // (slot, target meter) of each chart, checked before the (slow) analysis.
+    let plan: Vec<(Difficulty, Option<u32>)> = match &opts.charts {
+        Charts::Slots(ds) => ds.iter().map(|&d| (d, None)).collect(),
+        Charts::Meters(ms) => assign_slots(&model, ms)?
+            .into_iter()
+            .map(|(d, m)| (d, Some(m)))
+            .collect(),
+    };
     let audio = decode_file(audio_path)?;
     let stems = if opts.stems {
         load_stems(audio_path, opts.device.clone())
@@ -155,12 +222,20 @@ pub fn create_song(audio_path: &Path, opts: &SongOptions) -> Result<PathBuf> {
     let visuals = install_visuals(&opts.visuals, &dir)?;
 
     let gen_opts = GenOptions::default();
-    let charts: Vec<_> = opts
-        .difficulties
+    let charts: Vec<_> = plan
         .iter()
-        .map(|&d| {
-            let c = generate(&analysis, &model, d, opts.seed, &gen_opts);
-            eprintln!("{:>9}: {:>4} rows, meter {}", d.name(), c.rows.len(), c.meter);
+        .map(|&(d, meter)| {
+            let c = match meter {
+                None => generate(&analysis, &model, d, opts.seed, &gen_opts),
+                Some(m) => generate_for_meter(&analysis, &model, d, m, opts.seed, &gen_opts),
+            };
+            let target = meter.map_or(String::new(), |m| format!(" (target {m})"));
+            eprintln!(
+                "{:>9}: {:>4} rows, meter {}{target}",
+                d.name(),
+                c.rows.len(),
+                c.meter
+            );
             c
         })
         .collect();

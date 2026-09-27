@@ -184,3 +184,27 @@ fn rejects_unknown_difficulty() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown difficulty"));
 }
+
+#[test]
+fn default_charts_are_meters_2_to_5_and_meters_are_configurable() {
+    let dir = out_dir("meters");
+    let sim = Simfile::load(&generate_song(&dir, &["-s", "3"])).unwrap();
+    let got: Vec<(&str, i32)> = sim
+        .charts
+        .iter()
+        .map(|c| (c.difficulty.as_str(), c.meter))
+        .collect();
+    assert_eq!(got, [("Beginner", 2), ("Easy", 3), ("Medium", 4), ("Hard", 5)]);
+
+    let sim = Simfile::load(&generate_song(&dir, &["-m", "1,3-4"])).unwrap();
+    let meters: Vec<i32> = sim.charts.iter().map(|c| c.meter).collect();
+    assert_eq!(meters, [1, 3, 4]);
+
+    let bad = Command::new(env!("CARGO_BIN_EXE_itg-charter"))
+        .args(["gen", fixture().to_str().unwrap(), "--no-stems", "-m", "0-4"])
+        .output()
+        .unwrap();
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("out of range 1..=10"));
+    let _ = std::fs::remove_dir_all(dir);
+}

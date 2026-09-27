@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
 use itg_charter::difficulty::{Difficulty, parse_list};
 use itg_charter::model::Model;
-use itg_charter::song::{self, SongOptions, VisualFiles};
+use itg_charter::song::{self, Charts, SongOptions, VisualFiles};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -19,7 +19,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Generate a song folder (.sm + audio + visuals) with one chart per difficulty.
-    Gen(GenArgs),
+    Gen(Box<GenArgs>),
     /// Add banner / background / jacket / background movie to an existing song folder.
     Decorate {
         /// The song's .sm file; the files are put next to it.
@@ -74,9 +74,18 @@ impl From<VisualArgs> for VisualFiles {
 struct GenArgs {
     /// Audio file (mp3, ogg, flac, wav).
     audio: PathBuf,
-    /// Difficulties, comma separated: beginner,easy,medium,hard,challenge or "all".
-    #[arg(short, long, default_value = "all")]
-    difficulties: String,
+    /// Meters to generate on the ITGmania scale (1-10), e.g. "2-5" or "1,3,6"; at most
+    /// 5, one per difficulty slot. Default: 2-5 (unless --difficulties is given).
+    #[arg(short, long, conflicts_with = "difficulties")]
+    meters: Option<String>,
+    /// Named set of meters (used when neither --meters nor --difficulties is given):
+    /// beginner = 2,3,4,5; full = 2,4,6,8,10.
+    #[arg(short, long, value_enum, default_value_t = song::Profile::Beginner)]
+    profile: song::Profile,
+    /// Instead of meters: difficulty slots with the typical density of human charts,
+    /// comma separated: beginner,easy,medium,hard,challenge or "all".
+    #[arg(short, long)]
+    difficulties: Option<String>,
     /// Random seed: the same audio, seed and options always give the same .sm file.
     #[arg(short, long, default_value_t = 0)]
     seed: u64,
@@ -109,8 +118,13 @@ struct GenArgs {
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Gen(args) => {
+            let charts = match (&args.difficulties, &args.meters) {
+                (Some(d), _) => Charts::Slots(parse_list(d)?),
+                (None, Some(m)) => Charts::Meters(song::parse_meters(m)?),
+                (None, None) => Charts::Meters(args.profile.meters()),
+            };
             let opts = SongOptions {
-                difficulties: parse_list(&args.difficulties)?,
+                charts,
                 seed: args.seed,
                 output: args.output,
                 bpm: args.bpm,
