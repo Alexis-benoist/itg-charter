@@ -124,7 +124,9 @@ jobs:
           set -o pipefail
           if ! cargo build --release --locked --target ${{ matrix.target }} 2>&1 | tee build.log; then
             # Job logs need a login to read; annotations are public: surface the error.
-            msg=$(grep -E -B2 -A12 "error(\[|:)" build.log | tail -60 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            # Portable across GNU and BSD tools, and `|| true` so `bash -e` cannot stop here.
+            msg=$( { grep -E -B2 -A12 "error(\[|:)" build.log || tail -40 build.log; } | tail -60 \
+              | awk '{ gsub(/%/, "%25"); gsub(/\r/, ""); printf "%s%%0A", $0 }' || true)
             echo "::error title=cargo build failed (${{ matrix.target }})::${msg:-build failed}"
             exit 1
           fi
@@ -149,8 +151,12 @@ jobs:
             tar czf "$NAME.tar.gz" "$NAME"
             archive="$NAME.tar.gz"
           fi
-          # shasum exists on Linux, macOS and in Git Bash on Windows.
-          shasum -a 256 "$archive" > "$archive.sha256"
+          # sha256sum on Linux and in Git Bash on Windows, shasum on macOS.
+          if command -v sha256sum > /dev/null; then
+            sha256sum "$archive" > "$archive.sha256"
+          else
+            shasum -a 256 "$archive" > "$archive.sha256"
+          fi
           cat "$archive.sha256"
       - uses: actions/upload-artifact@v4
         with:
