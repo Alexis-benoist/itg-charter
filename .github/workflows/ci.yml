@@ -11,7 +11,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -28,7 +28,7 @@ jobs:
   determinism:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Same seed twice gives byte-identical simfiles
@@ -58,24 +58,30 @@ jobs:
   # Every push to main (and every v* tag) publishes a GitHub release with binaries for
   # all platforms, once the checks and the determinism test have passed. Pushes to
   # main get the version vMAJOR.MINOR.<run number> (MAJOR.MINOR from Cargo.toml).
+  # On other branches and pull requests the binaries are built and smoke-tested but
+  # nothing is published, so packaging problems show up before they reach main.
   version:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [check, determinism]
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.v.outputs.tag }}
+      publish: ${{ steps.v.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: v
         run: |
+          majmin=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([0-9]+)\.([0-9]+)\..*/\1.\2/')
+          publish=false
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            tag="$GITHUB_REF_NAME"
+            tag="$GITHUB_REF_NAME"; publish=true
+          elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            tag="v${majmin}.${GITHUB_RUN_NUMBER}"; publish=true
           else
-            majmin=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([0-9]+)\.([0-9]+)\..*/\1.\2/')
-            tag="v${majmin}.${GITHUB_RUN_NUMBER}"
+            tag="v${majmin}.${GITHUB_RUN_NUMBER}-dev"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "release $tag"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "version $tag (publish: $publish)"
 
   build:
     needs: version
@@ -83,23 +89,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Oldest supported Ubuntu runner: the binary then also runs on older glibc.
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             archive_suffix: linux-x86_64
+            native: true
           - os: macos-latest
             target: aarch64-apple-darwin
             archive_suffix: macos-arm64
-          - os: macos-13
+            native: true
+          # Intel macOS runners are retired (macos-13): cross-compile from Apple silicon.
+          - os: macos-latest
             target: x86_64-apple-darwin
             archive_suffix: macos-x86_64
+            native: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive_suffix: windows-x86_64
+            native: true
     runs-on: ${{ matrix.os }}
     env:
       NAME: itg-charter-${{ needs.version.outputs.tag }}-${{ matrix.archive_suffix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -107,23 +119,39 @@ jobs:
         with:
           key: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! cargo build --release --locked --target ${{ matrix.target }} 2>&1 | tee build.log; then
+            # Job logs need a login to read; annotations are public: surface the error.
+            msg=$(grep -E -B2 -A12 "error(\[|:)" build.log | tail -60 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=cargo build failed (${{ matrix.target }})::${msg:-build failed}"
+            exit 1
+          fi
+      - name: Smoke test
+        if: matrix.native
+        shell: bash
+        run: |
+          bin="target/${{ matrix.target }}/release/itg-charter"
+          "$bin" --version
+          "$bin" gen tests/fixtures/test_song.mp3 --no-stems -s 42 -o smoke
+          ls smoke/*/*.sm
+      - name: Package
         shell: bash
         run: |
           mkdir "$NAME"
-          cp "target/${{ matrix.target }}/release/itg-charter" README.md LICENSE "$NAME/"
-          tar czf "$NAME.tar.gz" "$NAME"
-          shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path $env:NAME
-          Copy-Item "target\${{ matrix.target }}\release\itg-charter.exe", "README.md", "LICENSE" -Destination $env:NAME
-          Compress-Archive -Path $env:NAME -DestinationPath "$env:NAME.zip"
-          (Get-FileHash "$env:NAME.zip" -Algorithm SHA256).Hash.ToLower() + "  $env:NAME.zip" | Out-File -Encoding ascii "$env:NAME.zip.sha256"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/itg-charter.exe" README.md LICENSE "$NAME/"
+            7z a -tzip "$NAME.zip" "$NAME" > /dev/null
+            archive="$NAME.zip"
+          else
+            cp "target/${{ matrix.target }}/release/itg-charter" README.md LICENSE "$NAME/"
+            tar czf "$NAME.tar.gz" "$NAME"
+            archive="$NAME.tar.gz"
+          fi
+          # shasum exists on Linux, macOS and in Git Bash on Windows.
+          shasum -a 256 "$archive" > "$archive.sha256"
+          cat "$archive.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.archive_suffix }}
@@ -133,7 +161,7 @@ jobs:
   # One job creates the release, with the binaries of every platform that built.
   release:
     needs: [version, build]
-    if: ${{ !cancelled() && needs.version.result == 'success' }}
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
