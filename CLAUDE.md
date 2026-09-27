@@ -20,7 +20,11 @@ itg-charter train <Songs/>              # réentraîne model/model.json
   installée sans toucher au PATH, `~/.cargo/bin/cargo fmt --all` et `~/.cargo/bin/cargo clippy ...`
   (même version que la CI : stable).
 - Évaluations sur la bibliothèque du jeu (`SONGS=~/Downloads/ITGmania-1.1.0-Linux-no-songs/itgmania/Songs`) :
-  - `cargo run --release --example eval_sync -- $SONGS 150 [--stems]` — BPM/offset vs simfiles humains ;
+  - `cargo run --release --example eval_sync -- $SONGS --max 400 --split test [--stems] [--tag T]` —
+    BPM/offset vs simfiles humains ; split train/test déterministe par titre ; CSV par morceau dans
+    `target/eval/`, résumé versionné dans `eval/` ;
+  - `fit_sync` / `fit_octave` (sur les CSV d'`eval_sync --split train`) — recalibrent les poids du
+    demi-temps et le prior de tempo ; toujours rapporter le score sur le split **test** ;
   - `cargo run --release --example eval_charts -- $SONGS 40 [parity_weight temperature repeat_bonus]` —
     stats des charts générés vs distribution humaine (objectif : `outside human range: 0`) ;
   - `cargo run --release --example parity_check` — notre parité vs `#TECHCOUNTS` du cache du jeu
@@ -60,7 +64,12 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
 - **Modèle** : `train` est déterministe (fichiers triés, compteurs entiers). Changer le format ⇒
   incrémenter `MODEL_VERSION` et réentraîner.
 - **Calibrations** mesurées, pas devinées : `ENVELOPE_LATENCY` (17 ms, via `eval_sync`) ;
-  `GenOptions::default()` (via `eval_charts`). Documenter la mesure quand on les change.
+  `HALF_BEAT_WEIGHTS` (via `fit_sync`) ; `TEMPO_PRIOR_*` (via `fit_octave`) ;
+  `GenOptions::default()` (via `eval_charts`). Ajuster sur train, mesurer sur test, documenter.
+- **Un commit par expérience**, y compris celles qui régressent, avec les chiffres mesurés dans le
+  message et le résumé `eval/*.txt` ajouté (voir `eval/README.md`).
+- **MP3** : symphonia est gapless, le jeu non ; `audio.rs` ajoute en tête le silence que le jeu joue
+  (trame Info + délai LAME) et `SongAnalysis::compute` fait de même pour les stems.
 - Les grilles utilisées pour charter sont arrondies comme dans le `.sm` (BPM et offset à 0,001).
 - Code et commentaires en anglais ; licence GPL-3.0 (aubio et le code de parité d'ITGmania sont GPL).
 
@@ -79,7 +88,9 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
 
 ## Résultats de référence (à maintenir / améliorer)
 
-- Sync (150 morceaux, sans stems) : BPM exact 83 %, exact à l'octave près 98,6 % ;
-  phase : erreur médiane 5,8 ms, 85 % sous 20 ms ; ~11 % d'erreurs d'un demi-temps.
+- Sync (split test, 400 morceaux, sans stems) : BPM exact 89,2 %, octave 10,2 % ; sur BPM exact,
+  97,5 % calés (< 30 ms), 1,7 % d'erreurs d'un demi-temps, phase médiane 5,0 ms, 94 % sous 20 ms.
+  Limites connues : choix d'octave (le prior seul n'y fait rien, cf. `fit_octave`) ; boucles EDM
+  synthétiques à contretemps (tests `#[ignore]` dans `analysis.rs`).
 - Charts (40 morceaux × 5 difficultés) : toutes les médianes (NPS, sauts, holds, crossovers,
   footswitches, jacks, double-steps, meter) dans l'intervalle p10–p90 humain.

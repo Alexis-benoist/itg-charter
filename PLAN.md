@@ -100,3 +100,13 @@ Fait : étapes 1 à 6 (sauf `repeat.rs` intégré dans `chart.rs::find_repeats`)
 Écart au plan : Beginner n'est pas limité aux noires sans sauts — les données humaines ont 9 %
 de sauts et quelques croches en Beginner, on suit les données.
 Reste : erreurs d'un demi-temps (~11 %), BPM variables, notes pendant les holds, test en jeu.
+
+## Synchro (2026-09-27, suite)
+
+Plan détaillé : `~/.claude/plans/sleepy-soaring-pelican.md`. Résultats (split test, 400 morceaux) :
+- décision demi-temps apprise (`fit_sync`) : 79,8 % → 98,3 % de bonnes décisions ;
+- MP3 à tag LAME alignés sur le jeu : MP3 calés 47 % → 95 % ;
+- au total, morceaux calés sur BPM exact 76,8 % → 97,5 %, phase médiane 5,0 ms ;
+- octave : aucun prior (appris ou ajusté) ne bat 140 / 0,6 octave sur test (89,2 % BPM exact).
+Demucs n'intervient plus dans la phase (features calculées sur le mix) ; l'utiliser pour le
+demi-temps demanderait de réentraîner avec stems (~4 h GPU) — non fait.
