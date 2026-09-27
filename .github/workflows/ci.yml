@@ -55,29 +55,72 @@ jobs:
           path: out-a/
           if-no-files-found: error
 
-  # Pushing a tag like v0.2.0 publishes a GitHub release with the Linux binary,
-  # once the checks and the determinism test have passed.
+  # Pushing a tag like v0.2.0 publishes a GitHub release with binaries for all
+  # platforms, once the checks and the determinism test have passed.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [check, determinism]
-    runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: itg-charter
+            archive_suffix: linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: itg-charter
+            archive_suffix: macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: itg-charter
+            archive_suffix: macos-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: itg-charter.exe
+            archive_suffix: windows-x86_64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - name: Build and package
+        with:
+          key: ${{ matrix.target }}
+
+      # aubio-rs (builtin) compiles a C library; make sure system libs are available.
+      - name: Install build deps (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
         run: |
-          cargo build --release
-          name="itg-charter-${GITHUB_REF_NAME}-linux-x86_64"
+          name="itg-charter-${GITHUB_REF_NAME}-${{ matrix.archive_suffix }}"
           mkdir "$name"
-          cp target/release/itg-charter README.md LICENSE "$name/"
+          cp "target/${{ matrix.target }}/release/${{ matrix.artifact }}" README.md LICENSE "$name/"
           tar czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $name = "itg-charter-$env:GITHUB_REF_NAME-${{ matrix.archive_suffix }}"
+          New-Item -ItemType Directory -Path $name
+          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.artifact }}", "README.md", "LICENSE" -Destination $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+          (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower() + "  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            itg-charter-*.tar.gz
-            itg-charter-*.tar.gz.sha256
+            itg-charter-*.*
           generate_release_notes: true
