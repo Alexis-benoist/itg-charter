@@ -29,7 +29,7 @@ pub const BPM_PRIOR_BINS_PER_OCTAVE: f64 = 24.0;
 pub const BPM_PRIOR_OCTAVES: f64 = 2.5;
 /// Gaussian smoothing of the tempo histogram, in bins (applied when querying, so it
 /// can be tuned without retraining). Chosen with `examples/eval_sync.rs`.
-pub const BPM_PRIOR_SIGMA_BINS: f64 = 8.0;
+pub const BPM_PRIOR_SIGMA_BINS: f64 = 12.0;
 
 /// The model shipped with the binary (trained on the ITGmania songs available at build time).
 pub const EMBEDDED: &str = include_str!("../model/model.json");
