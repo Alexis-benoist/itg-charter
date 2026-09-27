@@ -17,6 +17,11 @@ serde_json = "1.0.151"
 sha2 = "0.11.0"
 symphonia = { version = "0.6.1", features = ["mp3"] }
 
+# aubio-sys ships no prebuilt bindings for Apple silicon ("No prebuilt bindings. Try use
+# `bindgen` feature."): generate them there (needs libclang, provided by Xcode).
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+aubio-rs = { version = "0.2.0", features = ["builtin", "bindgen"] }
+
 [profile.test]
 # Audio analysis is too slow unoptimized.
 opt-level = 3
