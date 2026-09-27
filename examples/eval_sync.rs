@@ -44,6 +44,7 @@ struct Outcome {
     raw_on_beat: Option<bool>,
     on_beat_prob: f64,
     features: [f64; HALF_BEAT_FEATURES],
+    tempo_candidates: Vec<(f64, f64)>,
 }
 
 /// FNV-1a, stable across Rust versions (unlike `DefaultHasher`).
@@ -197,6 +198,7 @@ fn main() -> anyhow::Result<()> {
                         raw_on_beat,
                         on_beat_prob: a.diagnostics.on_beat,
                         features: a.diagnostics.half_features,
+                        tempo_candidates: a.diagnostics.tempo_candidates.clone(),
                     };
                     eprintln!(
                         "[{i:>3}] {:<40} truth {:>7.2} ours {:>7.2} {:<7} {}",
@@ -217,7 +219,7 @@ fn main() -> anyhow::Result<()> {
     let out_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/eval");
     std::fs::create_dir_all(&out_dir)?;
     let mut csv = String::from(
-        "name,format,truth_bpm,bpm,aubio_bpm,category,phase_ms,raw_on_beat,on_beat_prob,f_kick,f_lowmid,f_mid,f_high,f_mix\n",
+        "name,format,truth_bpm,bpm,aubio_bpm,category,phase_ms,raw_on_beat,on_beat_prob,f_kick,f_lowmid,f_mid,f_high,f_mix,tempo_candidates\n",
     );
     for r in &results {
         let _ = write!(
@@ -236,6 +238,13 @@ fn main() -> anyhow::Result<()> {
         for f in r.features {
             let _ = write!(csv, ",{f:.5}");
         }
+        // "bpm:score;bpm:score;..." (no commas, one CSV cell)
+        let cands: Vec<String> = r
+            .tempo_candidates
+            .iter()
+            .map(|(b, s)| format!("{b:.3}:{s:.5}"))
+            .collect();
+        let _ = write!(csv, ",{}", cands.join(";"));
         csv.push('\n');
     }
     std::fs::write(out_dir.join(format!("sync-{tag}.csv")), csv)?;

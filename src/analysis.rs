@@ -270,8 +270,7 @@ impl Grid {
 pub struct TempoOptions {
     pub min_bpm: f64,
     pub max_bpm: f64,
-    /// Prior weight of a tempo, used to pick the octave. Default: learned from the
-    /// tempos human charters chose ([`crate::model::embedded_bpm_prior`]).
+    /// Prior weight of a tempo, used to pick the octave. Default: [`lognormal_prior`].
     pub prior: fn(f64) -> f64,
 }
 
@@ -280,7 +279,7 @@ impl Default for TempoOptions {
         TempoOptions {
             min_bpm: 70.0,
             max_bpm: 250.0,
-            prior: crate::model::embedded_bpm_prior,
+            prior: lognormal_prior,
         }
     }
 }
@@ -335,63 +334,108 @@ fn search(
     best
 }
 
+/// Log-normal tempo prior: centre and width (in octaves). `examples/fit_octave.rs`
+/// found no reliable gain from re-fitting them: the best on the train half
+/// (centre 132, 0.8 octave: train 86.5%) scores 86.8% exact BPM on the test half,
+/// vs 89.2% for these values; the learned tempo histogram of the model gives 87.0%.
+/// The remaining octave errors are not explained by tempo range alone.
+pub const TEMPO_PRIOR_CENTER: f64 = 140.0;
+pub const TEMPO_PRIOR_OCTAVES: f64 = 0.6;
+
+/// Default tempo prior (see [`TEMPO_PRIOR_CENTER`]).
+pub fn lognormal_prior(bpm: f64) -> f64 {
+    let x = (bpm / TEMPO_PRIOR_CENTER).log2() / TEMPO_PRIOR_OCTAVES;
+    (-0.5 * x * x).exp()
+}
+
+/// Result of [`fit_tempo`].
+#[derive(Clone, Debug, Default)]
+pub struct TempoFit {
+    pub bpm: f64,
+    pub phase: f64,
+    /// Refined candidate tempos with their audio-only comb score; the fit is the
+    /// argmax of score × prior over this list (kept to calibrate the prior offline).
+    pub candidates: Vec<(f64, f64)>,
+}
+
+/// Picks the candidate maximizing score × prior.
+pub fn choose_candidate(candidates: &[(f64, f64)], prior: impl Fn(f64) -> f64) -> f64 {
+    let mut best = (candidates[0].0, f64::MIN);
+    for &(b, sc) in candidates {
+        let weighted = sc * prior(b);
+        if weighted > best.1 {
+            best = (b, weighted);
+        }
+    }
+    best.0
+}
+
 /// Fits a constant BPM and beat phase.
 ///
 /// The comb score of the true tempo is a very narrow peak (a 0.05 BPM error drifts
 /// by a quarter beat over a song), so the search is multi-resolution:
 /// 1. the whole [min, max] range at 0.1 BPM on a strongly dilated envelope (±40 ms);
-/// 2. the best local maxima (plus aubio's estimate) refined at 0.01 BPM (±12 ms);
-/// 3. the winner refined to 0.001 BPM on the raw envelope.
+/// 2. the best local maxima, their ×½ and ×2 and aubio's estimate, refined at
+///    0.01 BPM (±12 ms) — all on the audio alone;
+/// 3. the candidate with the best score × tempo prior (which picks the octave),
+///    refined to 0.001 BPM on the raw envelope.
 ///
-/// The tempo prior weights every stage, which picks the octave. Finally the BPM is
-/// snapped to an integer when that fits almost as well (most songs are at integer
-/// tempos).
-pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f64) {
+/// Finally the BPM is snapped to an integer when that fits almost as well (most
+/// songs are at integer tempos).
+pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> TempoFit {
     let stats = (env.mean(), env.std());
     let wide = env.dilated((0.04 * env.fps).round() as usize);
     let wstats = (wide.mean(), wide.std());
     let mid = env.dilated((0.012 * env.fps).round() as usize);
     let mstats = (mid.mean(), mid.std());
+    let in_range = |b: f64| (opts.min_bpm..=opts.max_bpm).contains(&b);
 
     // Stage 1: full range.
     let mut scan = Vec::new();
     let mut bpm = opts.min_bpm;
     while bpm <= opts.max_bpm {
         let (_, sc) = best_phase(&wide, 60.0 / bpm, 0.008, wstats);
-        scan.push((bpm, sc * (opts.prior)(bpm)));
+        scan.push((bpm, sc));
         bpm += 0.1;
     }
     let mut peaks: Vec<(f64, f64)> = (1..scan.len().saturating_sub(1))
         .filter(|&i| scan[i].1 >= scan[i - 1].1 && scan[i].1 > scan[i + 1].1)
         .map(|i| scan[i])
         .collect();
-    peaks.sort_by(|a, b| b.1.total_cmp(&a.1));
-    let mut candidates: Vec<f64> = peaks.iter().take(6).map(|p| p.0).collect();
-    for m in [0.5, 1.0, 2.0] {
-        let c = aubio_bpm * m;
-        if (opts.min_bpm..=opts.max_bpm).contains(&c) {
-            candidates.push(c);
-        }
+    peaks.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.total_cmp(&b.0)));
+    let mut seeds: Vec<f64> = Vec::new();
+    for &(p, _) in peaks.iter().take(8) {
+        seeds.extend([p, p * 0.5, p * 2.0]);
     }
+    seeds.extend([aubio_bpm, aubio_bpm * 0.5, aubio_bpm * 2.0]);
 
-    // Stage 2: refine each candidate.
-    let mut best = (candidates[0], f64::MIN);
-    for c in candidates {
-        let (b, _, sc) = search(&mid, c - 0.15, c + 0.15, 0.01, 0.003, mstats);
-        let weighted = sc * (opts.prior)(b);
-        if weighted > best.1 {
-            best = (b, weighted);
+    // Stage 2: refine every distinct seed.
+    let mut candidates: Vec<(f64, f64)> = Vec::new();
+    for c in seeds.into_iter().filter(|c| in_range(*c)) {
+        if candidates.iter().any(|(b, _)| (b - c).abs() < 0.2) {
+            continue;
         }
+        let (b, _, sc) = search(&mid, c - 0.15, c + 0.15, 0.01, 0.003, mstats);
+        candidates.push((b, sc));
     }
+    if candidates.is_empty() {
+        candidates.push((aubio_bpm.clamp(opts.min_bpm, opts.max_bpm), 0.0));
+    }
+    let chosen = choose_candidate(&candidates, opts.prior);
 
     // Stage 3: fine.
-    let (b, p, sc) = search(env, best.0 - 0.012, best.0 + 0.012, 0.001, 0.001, stats);
+    let (b, p, sc) = search(env, chosen - 0.012, chosen + 0.012, 0.001, 0.001, stats);
     let round = b.round();
     let (rp, rs) = best_phase(env, 60.0 / round, 0.001, stats);
-    if rs >= sc * 0.97 && (round - b).abs() < 0.2 {
+    let (bpm, phase) = if rs >= sc * 0.97 && (round - b).abs() < 0.2 {
         (round, rp)
     } else {
         ((b * 1000.0).round() / 1000.0, p)
+    };
+    TempoFit {
+        bpm,
+        phase,
+        candidates,
     }
 }
 
@@ -518,6 +562,8 @@ pub struct Diagnostics {
     pub half_features: [f64; HALF_BEAT_FEATURES],
     /// P(raw_phase is on the beat).
     pub on_beat: f64,
+    /// Candidate tempos and their audio-only scores (see [`TempoFit`]).
+    pub tempo_candidates: Vec<(f64, f64)>,
 }
 
 /// Everything the chart generator needs to know about the audio.
@@ -602,13 +648,18 @@ impl SongAnalysis {
         let beats = aubio_beats(&audio.samples, sr);
         let aubio_bpm = regression_period(&beats).map_or(120.0, |p| 60.0 / p);
         let env = &mix.envelope;
-        let (bpm, phase) = match opts.bpm {
+        let fit = match opts.bpm {
             Some(b) => {
                 let stats = (env.mean(), env.std());
-                (b, best_phase(env, 60.0 / b, 0.001, stats).0)
+                TempoFit {
+                    bpm: b,
+                    phase: best_phase(env, 60.0 / b, 0.001, stats).0,
+                    candidates: Vec::new(),
+                }
             }
             None => fit_tempo(env, aubio_bpm, &opts.tempo),
         };
+        let (bpm, phase) = (fit.bpm, fit.phase);
         let period = 60.0 / bpm;
         let bands: Vec<Envelope> = HALF_BEAT_BANDS
             .iter()
@@ -627,6 +678,7 @@ impl SongAnalysis {
         };
         let diagnostics = Diagnostics {
             raw_phase: phase,
+            tempo_candidates: fit.candidates,
             half_features,
             on_beat,
         };
