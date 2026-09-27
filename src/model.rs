@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const MODEL_VERSION: u32 = 2;
+pub const MODEL_VERSION: u32 = 3;
 pub const GAP_BUCKETS: usize = 6;
 pub const MASKS: usize = 16;
 pub const SNAP_CLASSES: usize = 6;
@@ -27,6 +27,9 @@ const NDIFF: usize = 5;
 pub const BPM_PRIOR_MIN: f64 = 60.0;
 pub const BPM_PRIOR_BINS_PER_OCTAVE: f64 = 24.0;
 pub const BPM_PRIOR_OCTAVES: f64 = 2.5;
+/// Gaussian smoothing of the tempo histogram, in bins (applied when querying, so it
+/// can be tuned without retraining). Chosen with `examples/eval_sync.rs`.
+pub const BPM_PRIOR_SIGMA_BINS: f64 = 4.0;
 
 /// The model shipped with the binary (trained on the ITGmania songs available at build time).
 pub const EMBEDDED: &str = include_str!("../model/model.json");
@@ -125,9 +128,11 @@ pub struct Model {
     /// meter ≈ intercept + slope × (75th percentile of per-measure rows per second).
     pub meter_intercept: f64,
     pub meter_slope: f64,
-    /// How often human charters chose each tempo (the song's main BPM), smoothed and
-    /// scaled to a maximum of 1; used to pick the tempo octave. See `BPM_PRIOR_*`.
-    pub bpm_prior: Vec<f64>,
+    /// How many songs human charters set at each tempo (the song's main BPM), as a
+    /// histogram of log2(BPM); used to pick the tempo octave. See `BPM_PRIOR_*`.
+    pub bpm_counts: Vec<f64>,
+    #[serde(skip)]
+    smoothed_prior: std::sync::OnceLock<Vec<f64>>,
 }
 
 fn ngram_index(d: usize, g: usize, p2: usize, p1: usize, cur: usize) -> usize {
@@ -323,7 +328,8 @@ impl Model {
             ngram,
             meter_intercept,
             meter_slope,
-            bpm_prior: bpm_histogram(&main_bpms),
+            bpm_counts: bpm_histogram(&main_bpms),
+            smoothed_prior: Default::default(),
         })
     }
 
@@ -331,7 +337,9 @@ impl Model {
     pub fn bpm_prior(&self, bpm: f64) -> f64 {
         const FLOOR: f64 = 0.02;
         let x = (bpm / BPM_PRIOR_MIN).log2() * BPM_PRIOR_BINS_PER_OCTAVE;
-        let h = &self.bpm_prior;
+        let h = self
+            .smoothed_prior
+            .get_or_init(|| smooth_histogram(&self.bpm_counts, BPM_PRIOR_SIGMA_BINS));
         if h.is_empty() || !(0.0..(h.len() - 1) as f64).contains(&x) {
             return FLOOR;
         }
@@ -444,7 +452,7 @@ fn main_bpm(timing: &Timing, rows: &[NoteRow]) -> f64 {
     best.0
 }
 
-/// Smoothed histogram of log2(BPM), scaled to a maximum of 1.
+/// Histogram of log2(BPM) (counts).
 fn bpm_histogram(bpms: &[f64]) -> Vec<f64> {
     let bins = (BPM_PRIOR_OCTAVES * BPM_PRIOR_BINS_PER_OCTAVE) as usize + 1;
     let mut h = vec![0.0; bins];
@@ -454,8 +462,12 @@ fn bpm_histogram(bpms: &[f64]) -> Vec<f64> {
             h[x.round() as usize] += 1.0;
         }
     }
-    // Gaussian smoothing, sigma = 2 bins (1/12 octave).
-    let sigma = 2.0f64;
+    h
+}
+
+/// Gaussian smoothing, scaled to a maximum of 1.
+fn smooth_histogram(h: &[f64], sigma: f64) -> Vec<f64> {
+    let bins = h.len();
     let smoothed: Vec<f64> = (0..bins)
         .map(|i| {
             (0..bins)

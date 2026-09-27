@@ -1,0 +1,4 @@
+split test, stems false, songs 400
+[all] n=400 | BPM exact 75.8% octave 14.8% other 9.5% | on exact BPM: ok 97.7% half-beat 1.7% quarter 0.0% other 0.7% | |phase| median 5.0 ms, <20 ms 94.1% | signed median of ok songs +2.0 ms
+[mp3] n=21 | BPM exact 85.7% octave 9.5% other 4.8% | on exact BPM: ok 94.4% half-beat 0.0% quarter 0.0% other 5.6% | |phase| median 5.7 ms, <20 ms 88.9% | signed median of ok songs +3.0 ms
+[ogg] n=379 | BPM exact 75.2% octave 15.0% other 9.8% | on exact BPM: ok 97.9% half-beat 1.8% quarter 0.0% other 0.4% | |phase| median 5.0 ms, <20 ms 94.4% | signed median of ok songs +1.5 ms

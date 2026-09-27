@@ -343,11 +343,9 @@ fn search(
 /// 2. the best local maxima (plus aubio's estimate) refined at 0.01 BPM (±12 ms);
 /// 3. the winner refined to 0.001 BPM on the raw envelope.
 ///
-/// Stages 1–2 pick the tempo *family* on the audio alone. The prior then only chooses
-/// the octave (×½, ×1, ×2): applied to the whole search, a sharp learned prior pulls
-/// tempos to ×4/3 neighbours near its peak (measured with `eval_sync`: 89% → 72%
-/// exact BPM). Finally the BPM is snapped to an integer when that fits almost as well
-/// (most songs are at integer tempos).
+/// The tempo prior weights every stage, which picks the octave. Finally the BPM is
+/// snapped to an integer when that fits almost as well (most songs are at integer
+/// tempos).
 pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f64) {
     let stats = (env.mean(), env.std());
     let wide = env.dilated((0.04 * env.fps).round() as usize);
@@ -360,7 +358,7 @@ pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f
     let mut bpm = opts.min_bpm;
     while bpm <= opts.max_bpm {
         let (_, sc) = best_phase(&wide, 60.0 / bpm, 0.008, wstats);
-        scan.push((bpm, sc));
+        scan.push((bpm, sc * (opts.prior)(bpm)));
         bpm += 0.1;
     }
     let mut peaks: Vec<(f64, f64)> = (1..scan.len().saturating_sub(1))
@@ -376,23 +374,10 @@ pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f
         }
     }
 
-    // Stage 2: refine each candidate; the best score gives the tempo family.
-    let mut family = (candidates[0], f64::MIN);
+    // Stage 2: refine each candidate.
+    let mut best = (candidates[0], f64::MIN);
     for c in candidates {
         let (b, _, sc) = search(&mid, c - 0.15, c + 0.15, 0.01, 0.003, mstats);
-        if sc > family.1 {
-            family = (b, sc);
-        }
-    }
-
-    // Octave: score × prior among ×½, ×1, ×2 of the family.
-    let mut best = (family.0, family.1 * (opts.prior)(family.0));
-    for m in [0.5, 2.0] {
-        let c = family.0 * m;
-        if !(opts.min_bpm..=opts.max_bpm).contains(&c) {
-            continue;
-        }
-        let (b, _, sc) = search(&mid, c - 0.03, c + 0.03, 0.01, 0.003, mstats);
         let weighted = sc * (opts.prior)(b);
         if weighted > best.1 {
             best = (b, weighted);
