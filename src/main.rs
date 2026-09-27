@@ -1,12 +1,10 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
-use itg_charter::chart::{GenOptions, generate};
 use itg_charter::difficulty::{Difficulty, parse_list};
 use itg_charter::model::Model;
-use itg_charter::simfile::{SongInfo, render_sm, sanitize};
-use itg_charter::stems::{self, StemOptions};
-use std::path::{Path, PathBuf};
+use itg_charter::song::{self, SongOptions, VisualFiles};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
@@ -20,8 +18,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate a song folder (.sm + audio) with one chart per difficulty.
+    /// Generate a song folder (.sm + audio + visuals) with one chart per difficulty.
     Gen(GenArgs),
+    /// Add banner / background / jacket / background movie to an existing song folder.
+    Decorate {
+        /// The song's .sm file; the files are put next to it.
+        sm: PathBuf,
+        #[command(flatten)]
+        visuals: VisualArgs,
+    },
     /// Learn pattern statistics from human-made charts (e.g. the game's Songs folder).
     Train {
         /// Folder searched recursively for .sm/.ssc files.
@@ -36,6 +41,33 @@ enum Command {
         #[arg(long)]
         no_stems: bool,
     },
+}
+
+#[derive(clap::Args)]
+struct VisualArgs {
+    /// Banner image (418×164), copied into the song folder.
+    #[arg(long)]
+    banner: Option<PathBuf>,
+    /// Background image, copied into the song folder.
+    #[arg(long)]
+    background: Option<PathBuf>,
+    /// Jacket image (square), copied into the song folder.
+    #[arg(long)]
+    jacket: Option<PathBuf>,
+    /// Background movie, copied into the song folder and started with the audio.
+    #[arg(long)]
+    bg_video: Option<PathBuf>,
+}
+
+impl From<VisualArgs> for VisualFiles {
+    fn from(v: VisualArgs) -> Self {
+        VisualFiles {
+            banner: v.banner,
+            background: v.background,
+            jacket: v.jacket,
+            bg_video: v.bg_video,
+        }
+    }
 }
 
 #[derive(clap::Args)]
@@ -70,99 +102,32 @@ struct GenArgs {
     /// Model file (default: the model embedded in the binary).
     #[arg(long)]
     model: Option<PathBuf>,
-}
-
-fn load_stems(audio: &Path, no_stems: bool, device: Option<String>) -> Option<itg_charter::analysis::Stems> {
-    if no_stems {
-        return None;
-    }
-    let opts = StemOptions {
-        device,
-        ..StemOptions::default()
-    };
-    eprintln!("separating sources with Demucs (cached after the first run)...");
-    match stems::separate(audio, &opts) {
-        Ok(s) => Some(s),
-        Err(e) => {
-            eprintln!("warning: no stems ({e:#}); analysing the full mix only");
-            None
-        }
-    }
-}
-
-fn run_gen(args: GenArgs) -> Result<()> {
-    let difficulties: Vec<Difficulty> = parse_list(&args.difficulties)?;
-    let model = match &args.model {
-        Some(p) => Model::from_json(&std::fs::read_to_string(p)?)?,
-        None => Model::embedded()?,
-    };
-    let audio = itg_charter::audio::decode_file(&args.audio)?;
-    let stems = load_stems(&args.audio, args.no_stems, args.device.clone());
-    let opts = AnalysisOptions {
-        bpm: args.bpm,
-        offset: args.offset,
-        ..AnalysisOptions::default()
-    };
-    let analysis = SongAnalysis::compute(&audio, stems.as_ref(), &opts);
-    eprintln!(
-        "BPM {:.3}, offset {:.3}",
-        analysis.grid.bpm,
-        analysis.grid.offset()
-    );
-
-    let stem_name = args
-        .audio
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let title = args.title.or(audio.title.clone()).unwrap_or(stem_name);
-    let artist = args.artist.or(audio.artist.clone()).unwrap_or_default();
-    let folder = sanitize(&title).replace(['/', '?', '*', '"', '<', '>', '|'], "_");
-    let dir = args.output.join(if folder.is_empty() {
-        "song".into()
-    } else {
-        folder.clone()
-    });
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let music = args
-        .audio
-        .file_name()
-        .context("audio file name")?
-        .to_string_lossy()
-        .into_owned();
-    let dest = dir.join(&music);
-    if std::fs::canonicalize(&args.audio).ok() != std::fs::canonicalize(&dest).ok() {
-        std::fs::copy(&args.audio, &dest).with_context(|| format!("copying audio to {}", dest.display()))?;
-    }
-
-    let gen_opts = GenOptions::default();
-    let charts: Vec<_> = difficulties
-        .iter()
-        .map(|&d| {
-            let c = generate(&analysis, &model, d, args.seed, &gen_opts);
-            eprintln!("{:>9}: {:>4} rows, meter {}", d.name(), c.rows.len(), c.meter);
-            c
-        })
-        .collect();
-    let info = SongInfo {
-        title,
-        artist,
-        music,
-        credit: format!("itg-charter {} (seed {})", env!("CARGO_PKG_VERSION"), args.seed),
-        bpm: analysis.grid.bpm,
-        offset: analysis.grid.offset(),
-        sample_start: analysis.sample_start(12.0),
-        sample_length: 12.0,
-    };
-    let sm = dir.join(format!("{}.sm", if folder.is_empty() { "song" } else { &folder }));
-    std::fs::write(&sm, render_sm(&info, &charts))?;
-    println!("{}", sm.display());
-    Ok(())
+    #[command(flatten)]
+    visuals: VisualArgs,
 }
 
 fn main() -> Result<()> {
     match Cli::parse().command {
-        Command::Gen(args) => run_gen(args)?,
+        Command::Gen(args) => {
+            let opts = SongOptions {
+                difficulties: parse_list(&args.difficulties)?,
+                seed: args.seed,
+                output: args.output,
+                bpm: args.bpm,
+                offset: args.offset,
+                title: args.title,
+                artist: args.artist,
+                stems: !args.no_stems,
+                device: args.device,
+                model: args.model,
+                visuals: args.visuals.into(),
+            };
+            println!("{}", song::create_song(&args.audio, &opts)?.display());
+        }
+        Command::Decorate { sm, visuals } => {
+            song::decorate(&sm, &visuals.into())?;
+            println!("{}", sm.display());
+        }
         Command::Train { songs, output } => {
             let model = Model::train(&songs, |i, n| {
                 if i % 100 == 0 {
@@ -188,7 +153,11 @@ fn main() -> Result<()> {
         }
         Command::Analyze { audio, no_stems } => {
             let a = itg_charter::audio::decode_file(&audio)?;
-            let stems = load_stems(&audio, no_stems, None);
+            let stems = if no_stems {
+                None
+            } else {
+                song::load_stems(&audio, None)
+            };
             let r = SongAnalysis::compute(&a, stems.as_ref(), &AnalysisOptions::default());
             println!(
                 "bpm {:.3}\noffset {:.3}\naubio_bpm {:.2}",

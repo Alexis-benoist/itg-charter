@@ -54,3 +54,30 @@ jobs:
           name: example-song-seed-42
           path: out-a/
           if-no-files-found: error
+
+  # Pushing a tag like v0.2.0 publishes a GitHub release with the Linux binary,
+  # once the checks and the determinism test have passed.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, determinism]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and package
+        run: |
+          cargo build --release
+          name="itg-charter-${GITHUB_REF_NAME}-linux-x86_64"
+          mkdir "$name"
+          cp target/release/itg-charter README.md LICENSE "$name/"
+          tar czf "$name.tar.gz" "$name"
+          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            itg-charter-*.tar.gz
+            itg-charter-*.tar.gz.sha256
+          generate_release_notes: true

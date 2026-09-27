@@ -293,7 +293,7 @@ impl Timing {
 }
 
 /// Everything needed to write a `.sm` file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SongInfo {
     pub title: String,
     pub artist: String,
@@ -303,6 +303,83 @@ pub struct SongInfo {
     pub offset: f64,
     pub sample_start: f64,
     pub sample_length: f64,
+    pub visuals: Visuals,
+}
+
+/// Image and movie files of a song, as file names inside the song folder
+/// (empty = none).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Visuals {
+    pub banner: String,
+    pub background: String,
+    pub jacket: String,
+    /// Background movie, started at the beginning of the audio.
+    pub bg_video: String,
+}
+
+/// Beat at which the audio time is 0 in a constant-BPM simfile
+/// (time(beat) = beat × 60 / BPM − OFFSET): where a background movie must start.
+pub fn movie_start_beat(bpm: f64, offset: f64) -> f64 {
+    offset * bpm / 60.0
+}
+
+/// `#BGCHANGES` value playing `movie` from `beat` (format used by ITG packs).
+pub fn bg_changes(movie: &str, beat: f64) -> String {
+    format!("{}={movie}=1.000=0=0=0=StretchNoLoop====", fmt3(beat))
+}
+
+/// Replaces the value of `#KEY:...;`, or inserts the tag at the end of the header
+/// (before the first chart).
+pub fn set_tag(sm: &str, key: &str, value: &str) -> String {
+    set_tag_after(sm, key, value, None)
+}
+
+/// Like [`set_tag`], but a missing tag is inserted right after the `#AFTER:...;` tag
+/// when there is one (to follow the order in which [`render_sm`] writes tags).
+pub fn set_tag_after(sm: &str, key: &str, value: &str, after: Option<&str>) -> String {
+    let value_range = |key: &str| {
+        let marker = format!("#{key}:");
+        let start = sm.find(&marker)? + marker.len();
+        let end = start + sm[start..].find(';')?;
+        Some(start..end)
+    };
+    if let Some(r) = value_range(key) {
+        return format!("{}{value}{}", &sm[..r.start], &sm[r.end..]);
+    }
+    let at = after
+        .and_then(value_range)
+        .map(|r| r.end + 1)
+        .or_else(|| sm.find("\n\n//---").or_else(|| sm.find("\n//---")))
+        .or_else(|| sm.find("#NOTES").map(|i| i.saturating_sub(1)))
+        .unwrap_or(sm.len());
+    format!("{}\n#{key}:{value};{}", &sm[..at], &sm[at..])
+}
+
+/// Declares the non-empty `visuals` in an existing `.sm` text. The movie start is
+/// computed from the file's own `#BPMS` / `#OFFSET` (constant tempo required).
+pub fn apply_visuals(sm: &str, visuals: &Visuals) -> Result<String> {
+    let mut out = sm.to_string();
+    for (key, value, after) in [
+        ("BANNER", &visuals.banner, None),
+        ("BACKGROUND", &visuals.background, None),
+        // render_sm writes JACKET (only when set) right after BACKGROUND.
+        ("JACKET", &visuals.jacket, Some("BACKGROUND")),
+    ] {
+        if !value.is_empty() {
+            out = set_tag_after(&out, key, &sanitize(value), after);
+        }
+    }
+    if !visuals.bg_video.is_empty() {
+        let parsed = Simfile::parse(sm, false)?;
+        let chart = parsed.charts.first().context("no chart in the simfile")?;
+        let timing = parsed.timing(chart)?;
+        if timing.bpms.len() != 1 {
+            bail!("a background movie needs a constant BPM");
+        }
+        let beat = movie_start_beat(timing.bpms[0].1, timing.offset);
+        out = set_tag(&out, "BGCHANGES", &bg_changes(&sanitize(&visuals.bg_video), beat));
+    }
+    Ok(out)
 }
 
 /// A chart to write: rows positioned in 1/48ths of a beat (192 per measure).
@@ -384,8 +461,13 @@ pub fn render_sm(info: &SongInfo, charts: &[OutChart]) -> String {
     tag(&mut s, "ARTISTTRANSLIT", "");
     tag(&mut s, "GENRE", "");
     tag(&mut s, "CREDIT", &sanitize(&info.credit));
-    tag(&mut s, "BANNER", "");
-    tag(&mut s, "BACKGROUND", "");
+    let v = &info.visuals;
+    tag(&mut s, "BANNER", &sanitize(&v.banner));
+    tag(&mut s, "BACKGROUND", &sanitize(&v.background));
+    // Only written when set, so that files without visuals stay as before.
+    if !v.jacket.is_empty() {
+        tag(&mut s, "JACKET", &sanitize(&v.jacket));
+    }
     tag(&mut s, "LYRICSPATH", "");
     tag(&mut s, "CDTITLE", "");
     tag(&mut s, "MUSIC", &sanitize(&info.music));
@@ -395,7 +477,12 @@ pub fn render_sm(info: &SongInfo, charts: &[OutChart]) -> String {
     tag(&mut s, "SELECTABLE", "YES");
     tag(&mut s, "BPMS", &format!("0.000={}", fmt3(info.bpm)));
     tag(&mut s, "STOPS", "");
-    tag(&mut s, "BGCHANGES", "");
+    let movie = if v.bg_video.is_empty() {
+        String::new()
+    } else {
+        bg_changes(&sanitize(&v.bg_video), movie_start_beat(info.bpm, info.offset))
+    };
+    tag(&mut s, "BGCHANGES", &movie);
     tag(&mut s, "KEYSOUNDS", "");
     for c in charts {
         s.push_str(&format!(
@@ -421,6 +508,71 @@ mod tests {
     }
 
     #[test]
+    fn visuals_are_rendered_and_movie_starts_at_audio_zero() {
+        let info = SongInfo {
+            title: "t".into(),
+            music: "t.ogg".into(),
+            bpm: 120.0,
+            offset: -0.25,
+            visuals: Visuals {
+                banner: "bn.png".into(),
+                background: "bg.png".into(),
+                jacket: "jacket.png".into(),
+                bg_video: "t-bg.mp4".into(),
+            },
+            ..SongInfo::default()
+        };
+        let chart = OutChart {
+            difficulty: "Easy".into(),
+            meter: 1,
+            description: "d".into(),
+            rows: vec![(0, tap(0))],
+        };
+        let text = render_sm(&info, std::slice::from_ref(&chart));
+        let sim = Simfile::parse(&text, false).unwrap();
+        assert_eq!(sim.tag("BANNER"), Some("bn.png"));
+        assert_eq!(sim.tag("BACKGROUND"), Some("bg.png"));
+        assert_eq!(sim.tag("JACKET"), Some("jacket.png"));
+        // offset -0.25 s at 120 BPM: audio time 0 is beat -0.5.
+        assert_eq!(
+            sim.tag("BGCHANGES"),
+            Some("-0.500=t-bg.mp4=1.000=0=0=0=StretchNoLoop====")
+        );
+
+        // Adding the visuals afterwards to a plain file gives the same tags.
+        let plain_info = SongInfo {
+            visuals: Visuals::default(),
+            ..info.clone()
+        };
+        let plain = render_sm(&plain_info, &[chart]);
+        assert!(!plain.contains("#JACKET"), "no JACKET tag without a jacket");
+        let decorated = apply_visuals(&plain, &info.visuals).unwrap();
+        let d = Simfile::parse(&decorated, false).unwrap();
+        for key in ["BANNER", "BACKGROUND", "JACKET", "BGCHANGES"] {
+            assert_eq!(d.tag(key), sim.tag(key), "{key}");
+        }
+        assert_eq!(d.charts[0].notes, sim.charts[0].notes);
+        assert!(decorated.find("#JACKET").unwrap() < decorated.find("#NOTES").unwrap());
+    }
+
+    #[test]
+    fn set_tag_replaces_or_inserts() {
+        let sm = "#TITLE:a;\n#BANNER:;\n\n//--- chart\n#NOTES:x;\n";
+        assert_eq!(
+            set_tag(sm, "BANNER", "b.png"),
+            "#TITLE:a;\n#BANNER:b.png;\n\n//--- chart\n#NOTES:x;\n"
+        );
+        assert_eq!(
+            set_tag(sm, "JACKET", "j.png"),
+            "#TITLE:a;\n#BANNER:;\n#JACKET:j.png;\n\n//--- chart\n#NOTES:x;\n"
+        );
+        assert_eq!(
+            set_tag_after(sm, "JACKET", "j.png", Some("TITLE")),
+            "#TITLE:a;\n#JACKET:j.png;\n#BANNER:;\n\n//--- chart\n#NOTES:x;\n"
+        );
+    }
+
+    #[test]
     fn roundtrip_rows_and_resolution() {
         let rows = vec![(0, tap(0)), (24, tap(1)), (48, tap(2)), (192 + 16, tap(3))];
         let chart = OutChart {
@@ -438,6 +590,7 @@ mod tests {
             offset: -0.25,
             sample_start: 10.0,
             sample_length: 12.0,
+            ..SongInfo::default()
         };
         let text = render_sm(&info, &[chart]);
         assert!(text.contains("#TITLE:A- bc;"));

@@ -36,6 +36,70 @@ fn generate_song(dir: &Path, extra: &[&str]) -> PathBuf {
     PathBuf::from(run(&args))
 }
 
+/// Dummy visual files (content does not matter to itg-charter).
+fn visual_files(dir: &Path) -> [PathBuf; 4] {
+    std::fs::create_dir_all(dir).unwrap();
+    ["bn.png", "bg.png", "jacket.png", "My Song=v1, final-bg.mp4"].map(|f| {
+        let p = dir.join(f);
+        std::fs::write(&p, f).unwrap();
+        p
+    })
+}
+
+#[test]
+fn visuals_given_to_gen_or_decorate_give_the_same_song() {
+    let (a, b) = (out_dir("visuals-gen"), out_dir("visuals-decorate"));
+    let files = visual_files(&a.join("src"));
+    let s = |p: &PathBuf| p.to_str().unwrap().to_string();
+    let flags = [
+        "--banner".to_string(),
+        s(&files[0]),
+        "--background".into(),
+        s(&files[1]),
+        "--jacket".into(),
+        s(&files[2]),
+        "--bg-video".into(),
+        s(&files[3]),
+    ];
+    let flag_refs: Vec<&str> = flags.iter().map(String::as_str).collect();
+
+    let mut gen_args = vec!["-d", "easy", "-s", "5"];
+    gen_args.extend(&flag_refs);
+    let with = generate_song(&a, &gen_args);
+    let sim = Simfile::load(&with).unwrap();
+    let song_dir = with.parent().unwrap();
+    assert_eq!(sim.tag("BANNER"), Some("bn.png"));
+    assert_eq!(sim.tag("BACKGROUND"), Some("bg.png"));
+    assert_eq!(sim.tag("JACKET"), Some("jacket.png"));
+    // '=' and ',' would break #BGCHANGES: the installed movie is renamed.
+    let movie = "My Song_v1_ final-bg.mp4";
+    assert!(song_dir.join(movie).exists());
+    let bg = sim.tag("BGCHANGES").unwrap();
+    assert!(
+        bg.ends_with(&format!("={movie}=1.000=0=0=0=StretchNoLoop====")),
+        "{bg}"
+    );
+    // The movie starts at audio time 0: beat = OFFSET × BPM / 60.
+    let timing = sim.timing(&sim.charts[0]).unwrap();
+    let beat: f64 = bg.split('=').next().unwrap().parse().unwrap();
+    assert!((beat - timing.offset * timing.bpms[0].1 / 60.0).abs() < 0.001);
+    for f in ["bn.png", "bg.png", "jacket.png"] {
+        assert!(song_dir.join(f).exists(), "{f} copied");
+    }
+
+    // gen without visuals, then decorate: same simfile.
+    let plain = generate_song(&b, &["-d", "easy", "-s", "5"]);
+    let mut dec_args = vec!["decorate", plain.to_str().unwrap()];
+    dec_args.extend(&flag_refs);
+    run(&dec_args);
+    assert_eq!(
+        std::fs::read_to_string(&plain).unwrap(),
+        std::fs::read_to_string(&with).unwrap()
+    );
+    let _ = std::fs::remove_dir_all(a);
+    let _ = std::fs::remove_dir_all(b);
+}
+
 #[test]
 fn generates_a_song_folder_readable_as_simfile() {
     let dir = out_dir("folder");

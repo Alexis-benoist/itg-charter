@@ -63,6 +63,7 @@ fn rendered_file_is_byte_identical_for_same_seed() {
         offset: analysis().grid.offset(),
         sample_start: 0.0,
         sample_length: 12.0,
+        ..SongInfo::default()
     };
     let render = || render_sm(&info, &Difficulty::ALL.map(|d| chart(d, 3)));
     assert_eq!(render(), render());
