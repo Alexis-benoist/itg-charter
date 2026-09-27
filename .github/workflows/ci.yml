@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        # Demucs and the ITGmania song library are not available here: the tests that
+        # need them are #[ignore]d and the evaluation examples are run locally.
+        run: cargo test
+
+  determinism:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Same seed twice gives byte-identical simfiles
+        run: |
+          cargo build --release
+          for run in a b; do
+            ./target/release/itg-charter gen tests/fixtures/test_song.mp3 --no-stems -s 42 -o "out-$run"
+          done
+          sha256sum out-a/*/*.sm out-b/*/*.sm
+          cmp out-a/*/*.sm out-b/*/*.sm
