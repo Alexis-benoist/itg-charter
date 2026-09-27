@@ -186,7 +186,7 @@ fn rejects_unknown_difficulty() {
 }
 
 #[test]
-fn default_charts_are_meters_2_to_5_and_meters_are_configurable() {
+fn default_charts_are_full_range_and_meters_are_configurable() {
     let dir = out_dir("meters");
     let sim = Simfile::load(&generate_song(&dir, &["-s", "3"])).unwrap();
     let got: Vec<(&str, i32)> = sim
@@ -194,7 +194,7 @@ fn default_charts_are_meters_2_to_5_and_meters_are_configurable() {
         .iter()
         .map(|c| (c.difficulty.as_str(), c.meter))
         .collect();
-    assert_eq!(got, [("Beginner", 2), ("Easy", 3), ("Medium", 4), ("Hard", 5)]);
+    assert_eq!(got, [("Beginner", 2), ("Easy", 4), ("Medium", 6), ("Hard", 8), ("Challenge", 9)]);
 
     let sim = Simfile::load(&generate_song(&dir, &["-m", "1,3-4"])).unwrap();
     let meters: Vec<i32> = sim.charts.iter().map(|c| c.meter).collect();

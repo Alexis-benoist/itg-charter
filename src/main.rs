@@ -75,12 +75,12 @@ struct GenArgs {
     /// Audio file (mp3, ogg, flac, wav).
     audio: PathBuf,
     /// Meters to generate on the ITGmania scale (1-10), e.g. "2-5" or "1,3,6"; at most
-    /// 5, one per difficulty slot. Default: 2-5 (unless --difficulties is given).
+    /// 5, one per difficulty slot. Default: 2,4,6,8,10 (unless --difficulties is given).
     #[arg(short, long, conflicts_with = "difficulties")]
     meters: Option<String>,
     /// Named set of meters (used when neither --meters nor --difficulties is given):
     /// beginner = 2,3,4,5; full = 2,4,6,8,10.
-    #[arg(short, long, value_enum, default_value_t = song::Profile::Beginner)]
+    #[arg(short, long, value_enum, default_value_t = song::Profile::Full)]
     profile: song::Profile,
     /// Instead of meters: difficulty slots with the typical density of human charts,
     /// comma separated: beginner,easy,medium,hard,challenge or "all".

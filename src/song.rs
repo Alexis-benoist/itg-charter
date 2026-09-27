@@ -38,9 +38,9 @@ pub enum Charts {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
 pub enum Profile {
     /// Meters 2, 3, 4, 5: for players who are starting.
-    #[default]
     Beginner,
     /// Meters 2, 4, 6, 8, 10: the whole range of the game, one chart per slot.
+    #[default]
     Full,
 }
 
