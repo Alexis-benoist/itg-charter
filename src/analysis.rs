@@ -270,8 +270,9 @@ impl Grid {
 pub struct TempoOptions {
     pub min_bpm: f64,
     pub max_bpm: f64,
-    /// Center of the tempo prior (log scale), ITG songs cluster around here.
-    pub prior_bpm: f64,
+    /// Prior weight of a tempo, used to pick the octave. Default: learned from the
+    /// tempos human charters chose ([`crate::model::embedded_bpm_prior`]).
+    pub prior: fn(f64) -> f64,
 }
 
 impl Default for TempoOptions {
@@ -279,7 +280,7 @@ impl Default for TempoOptions {
         TempoOptions {
             min_bpm: 70.0,
             max_bpm: 250.0,
-            prior_bpm: 140.0,
+            prior: crate::model::embedded_bpm_prior,
         }
     }
 }
@@ -334,11 +335,6 @@ fn search(
     best
 }
 
-fn prior(bpm: f64, center: f64) -> f64 {
-    let x = (bpm / center).log2() / 0.6;
-    (-0.5 * x * x).exp()
-}
-
 /// Fits a constant BPM and beat phase.
 ///
 /// The comb score of the true tempo is a very narrow peak (a 0.05 BPM error drifts
@@ -347,8 +343,11 @@ fn prior(bpm: f64, center: f64) -> f64 {
 /// 2. the best local maxima (plus aubio's estimate) refined at 0.01 BPM (±12 ms);
 /// 3. the winner refined to 0.001 BPM on the raw envelope.
 ///
-/// The octave is chosen with a log-normal tempo prior, and the BPM is snapped to an
-/// integer when that fits almost as well (most songs are at integer tempos).
+/// Stages 1–2 pick the tempo *family* on the audio alone. The prior then only chooses
+/// the octave (×½, ×1, ×2): applied to the whole search, a sharp learned prior pulls
+/// tempos to ×4/3 neighbours near its peak (measured with `eval_sync`: 89% → 72%
+/// exact BPM). Finally the BPM is snapped to an integer when that fits almost as well
+/// (most songs are at integer tempos).
 pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f64) {
     let stats = (env.mean(), env.std());
     let wide = env.dilated((0.04 * env.fps).round() as usize);
@@ -361,7 +360,7 @@ pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f
     let mut bpm = opts.min_bpm;
     while bpm <= opts.max_bpm {
         let (_, sc) = best_phase(&wide, 60.0 / bpm, 0.008, wstats);
-        scan.push((bpm, sc * prior(bpm, opts.prior_bpm)));
+        scan.push((bpm, sc));
         bpm += 0.1;
     }
     let mut peaks: Vec<(f64, f64)> = (1..scan.len().saturating_sub(1))
@@ -377,11 +376,24 @@ pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f
         }
     }
 
-    // Stage 2: refine each candidate.
-    let mut best = (candidates[0], f64::MIN);
+    // Stage 2: refine each candidate; the best score gives the tempo family.
+    let mut family = (candidates[0], f64::MIN);
     for c in candidates {
         let (b, _, sc) = search(&mid, c - 0.15, c + 0.15, 0.01, 0.003, mstats);
-        let weighted = sc * prior(b, opts.prior_bpm);
+        if sc > family.1 {
+            family = (b, sc);
+        }
+    }
+
+    // Octave: score × prior among ×½, ×1, ×2 of the family.
+    let mut best = (family.0, family.1 * (opts.prior)(family.0));
+    for m in [0.5, 2.0] {
+        let c = family.0 * m;
+        if !(opts.min_bpm..=opts.max_bpm).contains(&c) {
+            continue;
+        }
+        let (b, _, sc) = search(&mid, c - 0.03, c + 0.03, 0.01, 0.003, mstats);
+        let weighted = sc * (opts.prior)(b);
         if weighted > best.1 {
             best = (b, weighted);
         }
@@ -603,7 +615,7 @@ impl SongAnalysis {
             None => kick_layer(&audio.samples, sr),
         };
         let beats = aubio_beats(&audio.samples, sr);
-        let aubio_bpm = regression_period(&beats).map_or(opts.tempo.prior_bpm, |p| 60.0 / p);
+        let aubio_bpm = regression_period(&beats).map_or(120.0, |p| 60.0 / p);
         let env = &mix.envelope;
         let (bpm, phase) = match opts.bpm {
             Some(b) => {

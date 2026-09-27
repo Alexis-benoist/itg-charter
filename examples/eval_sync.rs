@@ -10,7 +10,7 @@
 //! `test`.
 //!
 //! Per-song results go to `target/eval/sync-<TAG>.csv` and the summary to
-//! `target/eval/sync-<TAG>.txt`.
+//! `eval/sync-<TAG>.txt` (committed with the change it measures).
 //!
 //! Usage: cargo run --release --example eval_sync -- SONGS_DIR
 //!        [--max N] [--split train|test|all] [--stems] [--tag TAG]
@@ -285,7 +285,10 @@ fn main() -> anyhow::Result<()> {
         );
     }
     print!("{report}");
-    std::fs::write(out_dir.join(format!("sync-{tag}.txt")), &report)?;
+    // Summaries are versioned (eval/), per-song CSVs are not (target/eval/).
+    let summary_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("eval");
+    std::fs::create_dir_all(&summary_dir)?;
+    std::fs::write(summary_dir.join(format!("sync-{tag}.txt")), &report)?;
     eprintln!("wrote {}", out_dir.join(format!("sync-{tag}.csv")).display());
     Ok(())
 }

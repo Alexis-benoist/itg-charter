@@ -16,11 +16,17 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const MODEL_VERSION: u32 = 1;
+pub const MODEL_VERSION: u32 = 2;
 pub const GAP_BUCKETS: usize = 6;
 pub const MASKS: usize = 16;
 pub const SNAP_CLASSES: usize = 6;
 const NDIFF: usize = 5;
+
+/// Tempo prior: histogram of log2(BPM) from `BPM_PRIOR_MIN`, `BPM_PRIOR_BINS_PER_OCTAVE`
+/// bins per octave over `BPM_PRIOR_OCTAVES` octaves.
+pub const BPM_PRIOR_MIN: f64 = 60.0;
+pub const BPM_PRIOR_BINS_PER_OCTAVE: f64 = 24.0;
+pub const BPM_PRIOR_OCTAVES: f64 = 2.5;
 
 /// The model shipped with the binary (trained on the ITGmania songs available at build time).
 pub const EMBEDDED: &str = include_str!("../model/model.json");
@@ -119,6 +125,9 @@ pub struct Model {
     /// meter ≈ intercept + slope × (75th percentile of per-measure rows per second).
     pub meter_intercept: f64,
     pub meter_slope: f64,
+    /// How often human charters chose each tempo (the song's main BPM), smoothed and
+    /// scaled to a maximum of 1; used to pick the tempo octave. See `BPM_PRIOR_*`.
+    pub bpm_prior: Vec<f64>,
 }
 
 fn ngram_index(d: usize, g: usize, p2: usize, p1: usize, cur: usize) -> usize {
@@ -259,9 +268,18 @@ impl Model {
         let mut per_diff: Vec<Vec<ChartFeatures>> = vec![Vec::new(); NDIFF];
         let mut meters: Vec<Vec<f64>> = vec![Vec::new(); NDIFF];
         let mut fit_points = Vec::new();
+        let mut main_bpms = Vec::new();
         for (i, path) in files.iter().enumerate() {
             progress(i, files.len());
             let Ok(sim) = Simfile::load(path) else { continue };
+            if let Some(bpm) = sim
+                .charts
+                .iter()
+                .find(|c| c.steps_type == "dance-single")
+                .and_then(|c| Some(main_bpm(&sim.timing(c).ok()?, &c.rows().ok()?)))
+            {
+                main_bpms.push(bpm);
+            }
             for chart in &sim.charts {
                 if chart.steps_type != "dance-single" {
                     continue;
@@ -305,7 +323,21 @@ impl Model {
             ngram,
             meter_intercept,
             meter_slope,
+            bpm_prior: bpm_histogram(&main_bpms),
         })
+    }
+
+    /// Prior weight of a tempo (0 < p ≤ 1), linear interpolation of `bpm_prior`.
+    pub fn bpm_prior(&self, bpm: f64) -> f64 {
+        const FLOOR: f64 = 0.02;
+        let x = (bpm / BPM_PRIOR_MIN).log2() * BPM_PRIOR_BINS_PER_OCTAVE;
+        let h = &self.bpm_prior;
+        if h.is_empty() || !(0.0..(h.len() - 1) as f64).contains(&x) {
+            return FLOOR;
+        }
+        let i = x.floor() as usize;
+        let f = x - i as f64;
+        (h[i] * (1.0 - f) + h[i + 1] * f).max(FLOOR)
     }
 
     pub fn stats(&self, d: Difficulty) -> &DiffStats {
@@ -398,6 +430,51 @@ impl ProbTable {
     }
 }
 
+/// The BPM in effect for most of the chart (the tempo a player would name).
+fn main_bpm(timing: &Timing, rows: &[NoteRow]) -> f64 {
+    let last = rows.last().map_or(0.0, |r| r.beat);
+    let mut best = (timing.bpms[0].1, f64::MIN);
+    for (i, &(start, bpm)) in timing.bpms.iter().enumerate() {
+        let end = timing.bpms.get(i + 1).map_or(last, |b| b.0).min(last);
+        let span = end - start.max(0.0);
+        if span > best.1 {
+            best = (bpm, span);
+        }
+    }
+    best.0
+}
+
+/// Smoothed histogram of log2(BPM), scaled to a maximum of 1.
+fn bpm_histogram(bpms: &[f64]) -> Vec<f64> {
+    let bins = (BPM_PRIOR_OCTAVES * BPM_PRIOR_BINS_PER_OCTAVE) as usize + 1;
+    let mut h = vec![0.0; bins];
+    for &b in bpms {
+        let x = (b / BPM_PRIOR_MIN).log2() * BPM_PRIOR_BINS_PER_OCTAVE;
+        if (0.0..bins as f64).contains(&x) {
+            h[x.round() as usize] += 1.0;
+        }
+    }
+    // Gaussian smoothing, sigma = 2 bins (1/12 octave).
+    let sigma = 2.0f64;
+    let smoothed: Vec<f64> = (0..bins)
+        .map(|i| {
+            (0..bins)
+                .map(|j| h[j] * (-0.5 * ((i as f64 - j as f64) / sigma).powi(2)).exp())
+                .sum()
+        })
+        .collect();
+    let max = smoothed.iter().copied().fold(0.0, f64::max).max(1e-12);
+    smoothed.iter().map(|v| v / max).collect()
+}
+
+/// Tempo prior of the embedded model (loaded once).
+pub fn embedded_bpm_prior(bpm: f64) -> f64 {
+    static MODEL: std::sync::OnceLock<Model> = std::sync::OnceLock::new();
+    MODEL
+        .get_or_init(|| Model::embedded().expect("embedded model"))
+        .bpm_prior(bpm)
+}
+
 fn diff_stats(charts: &[ChartFeatures], meters: &[f64]) -> DiffStats {
     let col = |f: &dyn Fn(&ChartFeatures) -> f64| Quantiles::of(&charts.iter().map(f).collect::<Vec<_>>());
     let tech = |f: &dyn Fn(&TechCounts) -> u32| {
@@ -471,6 +548,13 @@ mod tests {
         assert!(easy.charts > 0 && hard.charts > 0);
         assert!(easy.nps.p50 < hard.nps.p50);
         assert!(m.meter_slope > 0.0);
+        // The library is mostly pop/EDM: human tempos peak around 127 BPM.
+        let peak = (80..250)
+            .max_by(|a, b| m.bpm_prior(*a as f64).total_cmp(&m.bpm_prior(*b as f64)))
+            .unwrap();
+        assert!((115..140).contains(&peak), "prior peaks at {peak}");
+        assert!(m.bpm_prior(75.0) < m.bpm_prior(150.0));
+        assert!(m.bpm_prior(300.0) < m.bpm_prior(150.0));
         let s: f64 = (1..16u8).map(|c| m.prob(Difficulty::Medium, 3, 1, 8, c)).sum();
         assert!((s - 1.0).abs() < 1e-6, "probabilities sum to {s}");
     }
