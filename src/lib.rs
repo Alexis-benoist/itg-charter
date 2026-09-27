@@ -10,6 +10,7 @@ pub mod audio;
 pub mod chart;
 pub mod difficulty;
 pub mod model;
+pub mod music;
 pub mod parity;
 pub mod simfile;
 pub mod song;

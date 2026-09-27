@@ -18,6 +18,7 @@
 use itg_charter::analysis::{AnalysisOptions, HALF_BEAT_FEATURES, SongAnalysis};
 use itg_charter::audio::decode_file;
 use itg_charter::model::find_simfiles;
+use itg_charter::music::split_of;
 use itg_charter::simfile::Simfile;
 use itg_charter::stems;
 use std::fmt::Write as _;
@@ -45,27 +46,6 @@ struct Outcome {
     on_beat_prob: f64,
     features: [f64; HALF_BEAT_FEATURES],
     tempo_candidates: Vec<(f64, f64)>,
-}
-
-/// FNV-1a, stable across Rust versions (unlike `DefaultHasher`).
-fn fnv1a(s: &str) -> u64 {
-    s.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
-        (h ^ b as u64).wrapping_mul(0x100_0000_01b3)
-    })
-}
-
-/// "train" or "test" for a song title.
-pub fn split_of(title: &str) -> &'static str {
-    let norm: String = title
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .collect();
-    if fnv1a(&norm).is_multiple_of(2) {
-        "train"
-    } else {
-        "test"
-    }
 }
 
 /// Signed distance to the nearest beat of the truth grid, in beats, in [-0.5, 0.5).

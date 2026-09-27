@@ -1,0 +1,91 @@
+split train, songs 400
+
+== Beginner: 31880 notes | H(arrow|prev) 2.156 bits | I(ctx;arrow) 0.0136 | I(ctx;arrow|prev) 0.0361 (bias ~0.0246) | per cue given prev: pitch 0.0058, hit 0.0059, accent 0.0065 | corr(dpitch, dy) +0.007, corr(dpitch, dx) -0.011 over 14997 single moves
+  P(arrow | pitch move)        L     D     U     R  same  jump
+  down                0.184 0.184 0.187 0.179 0.186 0.080  (n=5633)
+  same                0.184 0.181 0.182 0.182 0.207 0.064  (n=10840)
+  up                  0.203 0.176 0.181 0.181 0.177 0.082  (n=5543)
+  unknown             0.190 0.171 0.164 0.188 0.204 0.084  (n=9864)
+  P(arrow | hit type)        L     D     U     R  same  jump
+  kick                0.193 0.182 0.171 0.180 0.217 0.055  (n=3352)
+  low-mid             0.194 0.181 0.193 0.184 0.178 0.070  (n=6390)
+  mid                 0.193 0.181 0.177 0.189 0.173 0.088  (n=8821)
+  high                0.183 0.173 0.171 0.180 0.217 0.076  (n=13317)
+  P(arrow | accent)        L     D     U     R  same  jump
+  weak                0.210 0.196 0.194 0.186 0.152 0.061  (n=7703)
+  strong              0.182 0.172 0.172 0.182 0.211 0.081  (n=24177)
+
+== Easy: 73342 notes | H(arrow|prev) 2.042 bits | I(ctx;arrow) 0.0120 | I(ctx;arrow|prev) 0.0207 (bias ~0.0107) | per cue given prev: pitch 0.0028, hit 0.0038, accent 0.0061 | corr(dpitch, dy) +0.002, corr(dpitch, dx) -0.004 over 41853 single moves
+  P(arrow | pitch move)        L     D     U     R  same  jump
+  down                0.211 0.208 0.218 0.207 0.107 0.050  (n=13284)
+  same                0.209 0.207 0.201 0.209 0.131 0.044  (n=26136)
+  up                  0.216 0.208 0.205 0.208 0.109 0.054  (n=12626)
+  unknown             0.221 0.205 0.201 0.209 0.102 0.062  (n=21296)
+  P(arrow | hit type)        L     D     U     R  same  jump
+  kick                0.233 0.208 0.219 0.212 0.080 0.048  (n=6859)
+  low-mid             0.219 0.213 0.205 0.209 0.102 0.052  (n=12187)
+  mid                 0.211 0.206 0.208 0.208 0.108 0.058  (n=19613)
+  high                0.210 0.204 0.200 0.207 0.129 0.049  (n=34683)
+  P(arrow | accent)        L     D     U     R  same  jump
+  weak                0.231 0.220 0.229 0.212 0.069 0.039  (n=17491)
+  strong              0.209 0.203 0.197 0.207 0.129 0.056  (n=55851)
+
+== Medium: 118114 notes | H(arrow|prev) 1.944 bits | I(ctx;arrow) 0.0079 | I(ctx;arrow|prev) 0.0115 (bias ~0.0066) | per cue given prev: pitch 0.0014, hit 0.0018, accent 0.0032 | corr(dpitch, dy) +0.004, corr(dpitch, dx) -0.015 over 69352 single moves
+  P(arrow | pitch move)        L     D     U     R  same  jump
+  down                0.212 0.228 0.227 0.227 0.053 0.052  (n=21622)
+  same                0.216 0.228 0.228 0.221 0.054 0.053  (n=38998)
+  up                  0.219 0.241 0.222 0.209 0.054 0.056  (n=19997)
+  unknown             0.226 0.222 0.220 0.217 0.052 0.063  (n=37497)
+  P(arrow | hit type)        L     D     U     R  same  jump
+  kick                0.236 0.227 0.224 0.227 0.042 0.045  (n=11686)
+  low-mid             0.225 0.222 0.224 0.221 0.048 0.059  (n=18417)
+  mid                 0.221 0.228 0.225 0.218 0.050 0.057  (n=31389)
+  high                0.212 0.231 0.224 0.217 0.059 0.057  (n=56622)
+  P(arrow | accent)        L     D     U     R  same  jump
+  weak                0.239 0.232 0.228 0.228 0.042 0.032  (n=31514)
+  strong              0.212 0.227 0.223 0.216 0.057 0.065  (n=86600)
+
+== Hard: 169160 notes | H(arrow|prev) 1.899 bits | I(ctx;arrow) 0.0077 | I(ctx;arrow|prev) 0.0108 (bias ~0.0046) | per cue given prev: pitch 0.0012, hit 0.0018, accent 0.0041 | corr(dpitch, dy) +0.001, corr(dpitch, dx) +0.007 over 100971 single moves
+  P(arrow | pitch move)        L     D     U     R  same  jump
+  down                0.213 0.242 0.242 0.217 0.043 0.043  (n=31989)
+  same                0.223 0.243 0.233 0.229 0.036 0.037  (n=51949)
+  up                  0.211 0.248 0.235 0.216 0.044 0.045  (n=29170)
+  unknown             0.223 0.238 0.231 0.223 0.038 0.048  (n=56052)
+  P(arrow | hit type)        L     D     U     R  same  jump
+  kick                0.230 0.246 0.233 0.233 0.030 0.028  (n=19547)
+  low-mid             0.229 0.236 0.233 0.224 0.032 0.047  (n=25490)
+  mid                 0.221 0.240 0.233 0.224 0.039 0.043  (n=44340)
+  high                0.211 0.244 0.236 0.219 0.044 0.045  (n=79783)
+  P(arrow | accent)        L     D     U     R  same  jump
+  weak                0.236 0.242 0.235 0.231 0.035 0.021  (n=51887)
+  strong              0.211 0.242 0.234 0.219 0.041 0.053  (n=117273)
+
+== Challenge: 215882 notes | H(arrow|prev) 1.879 bits | I(ctx;arrow) 0.0108 | I(ctx;arrow|prev) 0.0146 (bias ~0.0036) | per cue given prev: pitch 0.0029, hit 0.0029, accent 0.0071 | corr(dpitch, dy) -0.001, corr(dpitch, dx) -0.001 over 132472 single moves
+  P(arrow | pitch move)        L     D     U     R  same  jump
+  down                0.205 0.251 0.249 0.217 0.043 0.035  (n=39953)
+  same                0.227 0.246 0.238 0.232 0.030 0.027  (n=71422)
+  up                  0.210 0.242 0.244 0.216 0.044 0.043  (n=34813)
+  unknown             0.218 0.243 0.237 0.225 0.036 0.041  (n=69694)
+  P(arrow | hit type)        L     D     U     R  same  jump
+  kick                0.233 0.252 0.242 0.227 0.033 0.014  (n=29525)
+  low-mid             0.225 0.242 0.241 0.230 0.030 0.033  (n=33283)
+  mid                 0.219 0.239 0.241 0.223 0.039 0.039  (n=57586)
+  high                0.209 0.248 0.240 0.222 0.039 0.042  (n=95488)
+  P(arrow | accent)        L     D     U     R  same  jump
+  weak                0.234 0.245 0.238 0.232 0.036 0.015  (n=82380)
+  strong              0.207 0.245 0.242 0.220 0.037 0.049  (n=133502)
+
+== All: 608378 notes | H(arrow|prev) 1.948 bits | I(ctx;arrow) 0.0087 | I(ctx;arrow|prev) 0.0089 (bias ~0.0013) | per cue given prev: pitch 0.0011, hit 0.0015, accent 0.0047 | corr(dpitch, dy) +0.001, corr(dpitch, dx) -0.002 over 359645 single moves
+  P(arrow | pitch move)        L     D     U     R  same  jump
+  down                0.208 0.235 0.236 0.216 0.060 0.045  (n=112481)
+  same                0.219 0.233 0.227 0.223 0.059 0.039  (n=199345)
+  up                  0.213 0.236 0.229 0.212 0.061 0.050  (n=102149)
+  unknown             0.220 0.230 0.224 0.219 0.055 0.052  (n=194403)
+  P(arrow | hit type)        L     D     U     R  same  jump
+  kick                0.231 0.238 0.231 0.225 0.047 0.028  (n=70969)
+  low-mid             0.223 0.229 0.228 0.221 0.053 0.047  (n=95767)
+  mid                 0.218 0.230 0.228 0.219 0.057 0.049  (n=161749)
+  high                0.209 0.234 0.228 0.216 0.064 0.049  (n=279893)
+  P(arrow | accent)        L     D     U     R  same  jump
+  weak                0.234 0.238 0.233 0.227 0.044 0.024  (n=190975)
+  strong              0.208 0.231 0.226 0.215 0.065 0.056  (n=417403)
