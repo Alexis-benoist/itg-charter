@@ -1,38 +1,38 @@
 # itg-charter
 
-Génère des charts **ITGmania / In The Groove** (`.sm`, dance-single) à partir d'un fichier audio
-(mp3, ogg, flac, wav), pour les difficultés choisies, de façon reproductible avec une seed.
+Generates **ITGmania / In The Groove** charts (`.sm`, dance-single) from an audio file (mp3, ogg,
+flac, wav), for the chosen difficulties, reproducibly with a seed.
 
 ```sh
 cargo build --release
-./target/release/itg-charter gen chanson.mp3 -d easy,medium,hard -s 42 -o ~/.itgmania/Songs/itg-charter
+./target/release/itg-charter gen song.mp3 -d easy,medium,hard -s 42 -o ~/.itgmania/Songs/itg-charter
 ```
 
-Le dossier `~/.itgmania/Songs/itg-charter/<Titre>/` contient le `.sm` et une copie de l'audio ;
-relancer ITGmania pour le voir apparaître.
+The folder `~/.itgmania/Songs/itg-charter/<Title>/` contains the `.sm` and a copy of the audio;
+restart ITGmania to see it.
 
-## Comment ça marche
+## How it works
 
-1. **Séparation des sources** avec [Demucs](https://github.com/facebookresearch/demucs)
-   (batterie, basse, voix, autres ; optionnel, `--no-stems`).
-2. **Analyse** avec [aubio](https://aubio.org) : onsets et tempo, puis ajustement d'un BPM constant
-   et de l'offset sur tout le morceau.
-3. **Placement** des notes sur la grille (noires → doubles-croches) avec les densités, sauts et
-   holds appris sur de vrais charts.
-4. **Choix des flèches** : recherche en faisceau qui combine un modèle de patterns appris sur les
-   charts humains du jeu et le **calcul de parité d'ITGmania** (confort des pieds : crossovers,
-   footswitches, double-steps…), avec un bruit contrôlé par la seed.
+1. **Source separation** with [Demucs](https://github.com/facebookresearch/demucs)
+   (drums, bass, vocals, other; optional, `--no-stems`).
+2. **Analysis** with [aubio](https://aubio.org): onsets and tempo, then fitting a constant BPM and
+   the offset over the whole song.
+3. **Note placement** on the grid (quarter notes → sixteenths) with the densities, jumps and holds
+   learned from real charts.
+4. **Arrow choice**: a beam search combining a pattern model learned from the game's human charts
+   with **ITGmania's parity computation** (foot comfort: crossovers, footswitches,
+   double-steps…), with noise controlled by the seed.
 
-Options utiles : `--bpm`, `--offset` (forcer la synchro), `--title`, `--artist`, `--device cpu`,
-`--model` (autre modèle, voir `itg-charter train`).
+Useful options: `--bpm`, `--offset` (force the sync), `--title`, `--artist`, `--device cpu`,
+`--model` (another model, see `itg-charter train`).
 
-## Précision mesurée
+## Measured accuracy
 
-Sur la bibliothèque ITGmania (charts synchronisés par des humains) : BPM exact dans 83 % des cas
-(98,6 % à l'octave près), 85 % des morceaux calés à moins de 20 ms. Les charts générés ont des
-statistiques (densité, sauts, holds, crossovers, footswitches, meter) dans la distribution des
-charts humains de chaque difficulté.
+On the ITGmania library (charts synced by humans): exact BPM in 83 % of cases (98.6 % up to the
+octave), 85 % of songs synced within 20 ms. Generated charts have statistics (density, jumps,
+holds, crossovers, footswitches, meter) within the distribution of human charts of each
+difficulty.
 
-## Licence
+## License
 
-GPL-3.0 (aubio et le code de parité porté depuis ITGmania sont sous GPL-3.0).
+GPL-3.0 (aubio and the parity code ported from ITGmania are GPL-3.0).
