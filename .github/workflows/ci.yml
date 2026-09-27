@@ -55,33 +55,49 @@ jobs:
           path: out-a/
           if-no-files-found: error
 
-  # Pushing a tag like v0.2.0 publishes a GitHub release with binaries for all
-  # platforms, once the checks and the determinism test have passed.
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
+  # Every push to main (and every v* tag) publishes a GitHub release with binaries for
+  # all platforms, once the checks and the determinism test have passed. Pushes to
+  # main get the version vMAJOR.MINOR.<run number> (MAJOR.MINOR from Cargo.toml).
+  version:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [check, determinism]
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            majmin=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([0-9]+)\.([0-9]+)\..*/\1.\2/')
+            tag="v${majmin}.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release $tag"
+
+  build:
+    needs: version
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact: itg-charter
             archive_suffix: linux-x86_64
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact: itg-charter
             archive_suffix: macos-arm64
           - os: macos-13
             target: x86_64-apple-darwin
-            artifact: itg-charter
             archive_suffix: macos-x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: itg-charter.exe
             archive_suffix: windows-x86_64
     runs-on: ${{ matrix.os }}
+    env:
+      NAME: itg-charter-${{ needs.version.outputs.tag }}-${{ matrix.archive_suffix }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -90,37 +106,49 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-
-      # aubio-rs (builtin) compiles a C library; make sure system libs are available.
-      - name: Install build deps (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libclang-dev
-
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
-
       - name: Package (Unix)
-        if: matrix.os != 'windows-latest'
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          name="itg-charter-${GITHUB_REF_NAME}-${{ matrix.archive_suffix }}"
-          mkdir "$name"
-          cp "target/${{ matrix.target }}/release/${{ matrix.artifact }}" README.md LICENSE "$name/"
-          tar czf "$name.tar.gz" "$name"
-          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
-
+          mkdir "$NAME"
+          cp "target/${{ matrix.target }}/release/itg-charter" README.md LICENSE "$NAME/"
+          tar czf "$NAME.tar.gz" "$NAME"
+          shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
       - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $name = "itg-charter-$env:GITHUB_REF_NAME-${{ matrix.archive_suffix }}"
-          New-Item -ItemType Directory -Path $name
-          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.artifact }}", "README.md", "LICENSE" -Destination $name
-          Compress-Archive -Path $name -DestinationPath "$name.zip"
-          (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower() + "  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+          New-Item -ItemType Directory -Path $env:NAME
+          Copy-Item "target\${{ matrix.target }}\release\itg-charter.exe", "README.md", "LICENSE" -Destination $env:NAME
+          Compress-Archive -Path $env:NAME -DestinationPath "$env:NAME.zip"
+          (Get-FileHash "$env:NAME.zip" -Algorithm SHA256).Hash.ToLower() + "  $env:NAME.zip" | Out-File -Encoding ascii "$env:NAME.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.archive_suffix }}
+          path: ${{ env.NAME }}.*
+          if-no-files-found: error
 
+  # One job creates the release, with the binaries of every platform that built.
+  release:
+    needs: [version, build]
+    if: ${{ !cancelled() && needs.version.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - run: ls -la dist
       - uses: softprops/action-gh-release@v2
         with:
-          files: |
-            itg-charter-*.*
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: itg-charter ${{ needs.version.outputs.tag }}
+          files: dist/*
           generate_release_notes: true
+          make_latest: true
