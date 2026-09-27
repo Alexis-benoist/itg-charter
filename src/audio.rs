@@ -17,6 +17,9 @@ pub struct Audio {
     pub sample_rate: u32,
     pub title: Option<String>,
     pub artist: Option<String>,
+    /// Silence added in front of the decoded audio to match what the game plays
+    /// (see [`decode_file`]). Stems decoded by other tools need the same padding.
+    pub game_padding: usize,
 }
 
 impl Audio {
@@ -26,6 +29,7 @@ impl Audio {
             sample_rate,
             title: None,
             artist: None,
+            game_padding: 0,
         }
     }
 
@@ -63,6 +67,8 @@ pub fn decode_file(path: &Path) -> Result<Audio> {
         .default_track(TrackType::Audio)
         .ok_or_else(|| anyhow!("no audio track in {}", path.display()))?;
     let track_id = track.id;
+    let is_mp3 = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("mp3"));
+    let lame_delay = track.delay.filter(|_| is_mp3);
     let params = track
         .codec_params
         .as_ref()
@@ -109,10 +115,23 @@ pub fn decode_file(path: &Path) -> Result<Audio> {
         "no audio decoded from {}",
         path.display()
     );
+    // symphonia is gapless for MP3s with a Xing/Info + LAME tag: it drops the tag frame
+    // and trims the encoder delay. ITGmania plays both (the tag frame decodes to
+    // silence), so the music starts later in the game. Measured with
+    // `examples/eval_sync.rs`: without this, human-synced LAME-tagged MP3s had a median
+    // phase error of -47 ms (1152 + 1105 samples = 51 ms at 44.1 kHz).
+    let game_padding = lame_delay.map_or(0, |d| {
+        let frame = if sample_rate >= 32000 { 1152 } else { 576 };
+        d as usize + frame
+    });
+    if game_padding > 0 {
+        mono.splice(0..0, std::iter::repeat_n(0.0, game_padding));
+    }
     Ok(Audio {
         samples: mono,
         sample_rate,
         title,
         artist,
+        game_padding,
     })
 }

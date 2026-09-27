@@ -139,7 +139,23 @@ impl Layer {
 /// signal. Spectral flux is a poor kick detector because broadband noise (snares)
 /// still adds up across bins after filtering; plain energy is not fooled.
 pub fn kick_layer(samples: &[f32], sample_rate: u32) -> Layer {
-    let low = low_pass(samples, sample_rate, 150.0);
+    band_layer(samples, sample_rate, None, Some(150.0))
+}
+
+/// Energy-flux layer of one frequency band (`None` = open-ended), built from
+/// differences of one-pole low-pass filters.
+pub fn band_layer(samples: &[f32], sample_rate: u32, lo_hz: Option<f32>, hi_hz: Option<f32>) -> Layer {
+    let upper = match hi_hz {
+        Some(h) => low_pass(samples, sample_rate, h),
+        None => samples.to_vec(),
+    };
+    let low: Vec<f32> = match lo_hz {
+        Some(l) => {
+            let under = low_pass(samples, sample_rate, l);
+            upper.iter().zip(&under).map(|(a, b)| a - b).collect()
+        }
+        None => upper,
+    };
     let fps = sample_rate as f64 / HOP as f64;
     let n = low.len() / HOP + 1;
     let mut rms = Vec::with_capacity(n);
@@ -382,21 +398,71 @@ pub fn fit_tempo(env: &Envelope, aubio_bpm: f64, opts: &TempoOptions) -> (f64, f
     }
 }
 
-/// Picks beat 0 (the downbeat) using the kick layer.
-///
-/// Broadband onset functions are often dominated by off-beat hi-hats, so the
-/// fitted phase can be half a beat off. We try the 8 half-beat shifts of a bar
-/// and keep the one whose every-4th beat carries the most low-end energy, with
-/// a bonus for kick energy on all 4 beats (resolves the half-beat ambiguity).
+/// Frequency bands used to tell beats from off-beats: kick, low-mid (bass, toms),
+/// mid (snare body, voice), high (hats, cymbals). The full-mix spectral flux is
+/// the fifth feature.
+pub const HALF_BEAT_BANDS: [(Option<f32>, Option<f32>); 4] = [
+    (None, Some(150.0)),
+    (Some(150.0), Some(400.0)),
+    (Some(400.0), Some(2000.0)),
+    (Some(4000.0), None),
+];
+pub const HALF_BEAT_FEATURES: usize = HALF_BEAT_BANDS.len() + 1;
+
+/// Logistic regression deciding whether the fitted phase is on the beat (vs half a
+/// beat off): P(on beat) = sigmoid(bias + Σ wᵢ·featureᵢ), features from
+/// [`half_beat_features`]. Order: bias, kick, low-mid, mid, high, mix flux.
+/// Fitted with `examples/fit_sync.rs` (L2 = 0.01) on the train half of the ITGmania
+/// library (328 exact-BPM songs); accuracy of the on/off-beat decision on the test
+/// half: 98.3% (kick-only rule: 79.8%). The kick band barely matters: low-mid, mid and
+/// high bands carry the decision.
+pub const HALF_BEAT_WEIGHTS: [f64; HALF_BEAT_FEATURES + 1] =
+    [0.3889, 0.0724, 1.4130, 1.6772, 1.5346, -0.0057];
+
+/// For each band envelope and the mix flux: normalized comb score on the beats
+/// of `phase` minus the score half a beat later.
+pub fn half_beat_features(
+    bands: &[Envelope],
+    mix: &Envelope,
+    period: f64,
+    phase: f64,
+) -> [f64; HALF_BEAT_FEATURES] {
+    let mut out = [0.0; HALF_BEAT_FEATURES];
+    for (o, env) in out.iter_mut().zip(bands.iter().chain(std::iter::once(mix))) {
+        // Tolerate small timing offsets: peaks are only one frame wide.
+        let e = env.dilated((0.02 * env.fps) as usize);
+        let stats = (e.mean(), e.std());
+        *o = comb(&e, period, phase, stats) - comb(&e, period, phase + period / 2.0, stats);
+    }
+    out
+}
+
+/// Probability that `features` describe an on-beat phase.
+pub fn on_beat_probability(
+    features: &[f64; HALF_BEAT_FEATURES],
+    weights: &[f64; HALF_BEAT_FEATURES + 1],
+) -> f64 {
+    let z = weights[0]
+        + features
+            .iter()
+            .zip(&weights[1..])
+            .map(|(f, w)| f * w)
+            .sum::<f64>();
+    1.0 / (1.0 + (-z).exp())
+}
+
+/// Picks beat 0 (the downbeat) among the 4 beats of a bar starting at `phase`
+/// (already on the beat): the beat whose every-4th occurrence carries the most
+/// low-end energy.
 pub fn choose_downbeat(kick: &Envelope, bpm: f64, phase: f64) -> f64 {
     let period = 60.0 / bpm;
     // Tolerate small timing offsets: peaks are only one frame wide.
     let kick = &kick.dilated((0.02 * kick.fps) as usize);
     let stats = (kick.mean(), kick.std());
     let mut best = (phase, f64::MIN);
-    for k in 0..8 {
-        let p = phase + k as f64 * period / 2.0;
-        let s = comb(kick, 4.0 * period, p, stats) + 2.0 * comb(kick, period, p, stats);
+    for k in 0..4 {
+        let p = phase + k as f64 * period;
+        let s = comb(kick, 4.0 * period, p, stats);
         if s > best.1 + 1e-9 {
             best = (p, s);
         }
@@ -419,6 +485,24 @@ pub struct Stems {
     pub other: Vec<f32>,
 }
 
+impl Stems {
+    /// Copy with `n` samples of silence in front of every stem.
+    pub fn padded(&self, n: usize) -> Stems {
+        let pad = |v: &Vec<f32>| {
+            let mut out = vec![0.0; n];
+            out.extend_from_slice(v);
+            out
+        };
+        Stems {
+            sample_rate: self.sample_rate,
+            drums: pad(&self.drums),
+            bass: pad(&self.bass),
+            vocals: pad(&self.vocals),
+            other: pad(&self.other),
+        }
+    }
+}
+
 /// Onset layers of the stems.
 #[derive(Clone, Debug)]
 pub struct StemLayers {
@@ -426,6 +510,17 @@ pub struct StemLayers {
     pub bass: Layer,
     pub vocals: Layer,
     pub other: Layer,
+}
+
+/// Intermediate values, for evaluation and calibration.
+#[derive(Clone, Debug, Default)]
+pub struct Diagnostics {
+    /// Phase returned by the tempo fit, before the half-beat decision (seconds).
+    pub raw_phase: f64,
+    /// Features of `raw_phase` (see [`half_beat_features`]).
+    pub half_features: [f64; HALF_BEAT_FEATURES],
+    /// P(raw_phase is on the beat).
+    pub on_beat: f64,
 }
 
 /// Everything the chart generator needs to know about the audio.
@@ -438,6 +533,7 @@ pub struct SongAnalysis {
     pub mix: Layer,
     pub kick: Layer,
     pub stems: Option<StemLayers>,
+    pub diagnostics: Diagnostics,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -485,6 +581,15 @@ pub fn regression_period(beats: &[f64]) -> Option<f64> {
 impl SongAnalysis {
     pub fn compute(audio: &Audio, stems: Option<&Stems>, opts: &AnalysisOptions) -> SongAnalysis {
         let sr = audio.sample_rate;
+        // Demucs decodes gaplessly: give the stems the same leading silence as the mix.
+        let padded;
+        let stems = match stems {
+            Some(s) if audio.game_padding > 0 => {
+                padded = s.padded(audio.game_padding);
+                Some(&padded)
+            }
+            other => other,
+        };
         let mix = Layer::analyze(&audio.samples, sr);
         let layers = stems.map(|s| StemLayers {
             drums: Layer::analyze(&s.drums, s.sample_rate),
@@ -507,9 +612,26 @@ impl SongAnalysis {
             }
             None => fit_tempo(env, aubio_bpm, &opts.tempo),
         };
+        let period = 60.0 / bpm;
+        let bands: Vec<Envelope> = HALF_BEAT_BANDS
+            .iter()
+            .map(|&(lo, hi)| band_layer(&audio.samples, sr, lo, hi).envelope)
+            .collect();
+        let half_features = half_beat_features(&bands, env, period, phase);
+        let on_beat = on_beat_probability(&half_features, &HALF_BEAT_WEIGHTS);
+        let on_phase = if on_beat >= 0.5 {
+            phase
+        } else {
+            phase + period / 2.0
+        };
         let beat0 = match opts.offset {
             Some(o) => -o,
-            None => choose_downbeat(&kick.envelope, bpm, phase),
+            None => choose_downbeat(&kick.envelope, bpm, on_phase),
+        };
+        let diagnostics = Diagnostics {
+            raw_phase: phase,
+            half_features,
+            on_beat,
         };
         // Round like the simfile will, so that the grid used for charting is exactly
         // the one the game will play.
@@ -524,6 +646,7 @@ impl SongAnalysis {
             mix,
             kick,
             stems: layers,
+            diagnostics,
         }
     }
 }
@@ -560,17 +683,13 @@ pub mod tests {
     fn tempo_and_phase_on_synthetic_loops() {
         let sr = 44100;
         for &(bpm, first) in &[(128.0, 0.35), (150.0, 0.12), (174.0, 0.8), (100.0, 0.5)] {
-            let s = drum_loop(bpm, first, 30.0, sr);
-            let layer = Layer::analyze(&s, sr);
-            let beats = aubio_beats(&s, sr);
-            let aubio_bpm = 60.0 / regression_period(&beats).unwrap();
-            let (fit, phase) = fit_tempo(&layer.envelope, aubio_bpm, &TempoOptions::default());
+            let audio = Audio::from_samples(drum_loop(bpm, first, 30.0, sr), sr);
+            let a = SongAnalysis::compute(&audio, None, &AnalysisOptions::default());
+            let (fit, beat0) = (a.grid.bpm, a.grid.beat0);
             // Octave errors are accepted: the grid still lines up with the beats.
             let octave_ok = [0.5, 1.0, 2.0].iter().any(|m| (fit - bpm * m).abs() < 0.01);
-            assert!(octave_ok, "bpm {bpm}: got {fit} (aubio {aubio_bpm})");
+            assert!(octave_ok, "bpm {bpm}: got {fit} (aubio {})", a.aubio_bpm);
             let period = 60.0 / fit.max(bpm);
-            let kick = kick_layer(&s, sr);
-            let beat0 = choose_downbeat(&kick.envelope, fit, phase);
             let err = ((beat0 - first) / period).rem_euclid(1.0);
             let err_ms = err.min(1.0 - err) * period * 1000.0;
             assert!(
