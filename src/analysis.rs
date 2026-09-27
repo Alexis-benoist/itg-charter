@@ -726,7 +726,43 @@ impl SongAnalysis {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::synth::drum_loop;
+    use crate::synth::{drum_loop, offbeat_bass_loop};
+
+    fn offbeat_bass_case(clap: bool) {
+        let sr = 44100;
+        for &(bpm, first) in &[(128.0, 0.4), (140.0, 0.25)] {
+            let audio = Audio::from_samples(offbeat_bass_loop(bpm, first, 30.0, sr, clap), sr);
+            let a = SongAnalysis::compute(&audio, None, &AnalysisOptions::default());
+            let period = 60.0 / a.grid.bpm;
+            let err = ((a.grid.beat0 - first) / period).rem_euclid(1.0);
+            let err_ms = err.min(1.0 - err) * period * 1000.0;
+            assert!(
+                err_ms < 25.0,
+                "bpm {bpm}: beat 0 {:.3} is {err_ms:.0} ms off the kick (P(on beat) of raw phase {:.2})",
+                a.grid.beat0,
+                a.diagnostics.on_beat
+            );
+        }
+    }
+
+    /// Known limitation (run with `--ignored`): on this synthetic EDM loop (kick on the
+    /// beats; bass, hats and bass attacks on the off-beats), the learned half-beat
+    /// weights pick the off-beat with P ≈ 1, even with a clap on 2 and 4. They rely on
+    /// the low-mid/mid/high bands and almost ignore the kick (weight 0.07), which is
+    /// what the real library supports: 98.3% correct decisions on its test half.
+    /// Kept as a reproducible case for future work on the half-beat features.
+    #[test]
+    #[ignore]
+    fn offbeat_bass_with_backbeat_keeps_the_beat() {
+        offbeat_bass_case(true);
+    }
+
+    /// Same limitation, without any backbeat (see above).
+    #[test]
+    #[ignore]
+    fn offbeat_bass_without_backbeat_keeps_the_beat() {
+        offbeat_bass_case(false);
+    }
 
     #[test]
     fn tempo_and_phase_on_synthetic_loops() {

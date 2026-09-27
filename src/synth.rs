@@ -105,3 +105,49 @@ pub fn wav_bytes(samples: &[f32], sr: u32) -> Vec<u8> {
     }
     b
 }
+
+/// "Four on the floor" with an off-beat bass (typical EDM): kick on every beat, a
+/// loud sustained bass note on every "and", hats on the "and" too, and optionally a
+/// clap on beats 2 and 4. Broadband and low-band onset functions peak on the
+/// off-beats here.
+pub fn offbeat_bass_loop(bpm: f64, first_beat: f64, seconds: f64, sr: u32, clap: bool) -> Vec<f32> {
+    let n = (seconds * sr as f64) as usize;
+    let mut out = vec![0f32; n];
+    let period = 60.0 / bpm;
+    let mut noise = 777u32;
+    let mut rnd = move || {
+        noise = noise.wrapping_mul(1664525).wrapping_add(1013904223);
+        (noise >> 8) as f32 / (1 << 24) as f32 * 2.0 - 1.0
+    };
+    let mut k = 0;
+    loop {
+        let t0 = first_beat + k as f64 * period / 2.0;
+        if t0 >= seconds {
+            break;
+        }
+        let start = (t0 * sr as f64) as usize;
+        let len = if k % 2 == 0 { 0.15 } else { period / 2.0 * 0.9 };
+        for i in 0..(len * sr as f64) as usize {
+            if start + i >= n {
+                break;
+            }
+            let t = i as f32 / sr as f32;
+            let backbeat = clap && k % 4 == 2;
+            out[start + i] += if k % 2 == 0 {
+                let c = if backbeat {
+                    // band-limited noise burst around 1-2 kHz
+                    (2.0 * std::f32::consts::PI * 1500.0 * t).sin() * rnd() * 0.6 * (-t * 25.0).exp()
+                } else {
+                    0.0
+                };
+                (2.0 * std::f32::consts::PI * 50.0 * t).sin() * (-t * 30.0).exp() * 0.8 + c
+            } else {
+                let attack = (t * 400.0).min(1.0);
+                attack * 0.7 * (2.0 * std::f32::consts::PI * 110.0 * t).sin()
+                    + rnd() * 0.3 * (-t * 60.0).exp()
+            };
+        }
+        k += 1;
+    }
+    out
+}
