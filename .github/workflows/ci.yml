@@ -39,3 +39,18 @@ jobs:
           done
           sha256sum out-a/*/*.sm out-b/*/*.sm
           cmp out-a/*/*.sm out-b/*/*.sm
+      - name: Upload the Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: itg-charter-linux-x86_64
+          path: |
+            target/release/itg-charter
+            README.md
+            LICENSE
+          if-no-files-found: error
+      - name: Upload the song generated from the fixture (playable in ITGmania)
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-song-seed-42
+          path: out-a/
+          if-no-files-found: error
