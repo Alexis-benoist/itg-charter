@@ -16,10 +16,11 @@ itg-charter train <Songs/>              # réentraîne model/model.json
 - `cargo test` — rapide (le profil test est en `opt-level = 3`, l'analyse audio est lente sinon).
 - `cargo test -- --ignored` — lance aussi le vrai Demucs (venv requis, voir plus bas).
 - `cargo fmt --all --check` et `cargo clippy --all-targets -- -D warnings` — exigés par la CI.
-  La toolchain Ubuntu (`/usr/bin/cargo`) n'a ni rustfmt ni clippy : utiliser la toolchain rustup
-  installée sans toucher au PATH, `~/.cargo/bin/cargo fmt --all` et `~/.cargo/bin/cargo clippy ...`
-  (même version que la CI : stable).
-- Évaluations sur la bibliothèque du jeu (`SONGS=~/Downloads/ITGmania-1.1.0-Linux-no-songs/itgmania/Songs`) :
+  Un cargo de distribution (ex. `/usr/bin/cargo` d'Ubuntu) peut ne fournir ni rustfmt ni clippy :
+  utiliser alors une toolchain rustup stable (même version que la CI), par exemple
+  `~/.cargo/bin/cargo fmt --all` et `~/.cargo/bin/cargo clippy ...`.
+- Évaluations sur une bibliothèque de chansons ITGmania (`SONGS=$ITGMANIA_DIR/Songs`, où
+  `$ITGMANIA_DIR` est le dossier d'installation du jeu) :
   - `cargo run --release --example eval_sync -- $SONGS --max 400 --split test [--stems] [--tag T]` —
     BPM/offset vs simfiles humains ; split train/test déterministe par titre ; CSV par morceau dans
     `target/eval/`, résumé versionné dans `eval/` ;
@@ -27,8 +28,8 @@ itg-charter train <Songs/>              # réentraîne model/model.json
     demi-temps et le prior de tempo ; toujours rapporter le score sur le split **test** ;
   - `cargo run --release --example eval_charts -- $SONGS 40 [parity_weight temperature repeat_bonus]` —
     stats des charts générés vs distribution humaine (objectif : `outside human range: 0`) ;
-  - `cargo run --release --example parity_check` — notre parité vs `#TECHCOUNTS` du cache du jeu
-    (`~/.itgmania/Cache/Songs`).
+  - `ITGMANIA_DIR=… cargo run --release --example parity_check` — notre parité vs `#TECHCOUNTS`
+    du cache du jeu (`~/.itgmania/Cache/Songs`).
   Relancer l'éval concernée après toute modification de l'analyse, du générateur ou de la parité.
 
 ## Architecture (`src/`)
@@ -77,14 +78,14 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
 
 - `.cargo/config.toml` définit `CFLAGS=-D_DEFAULT_SOURCE` : sans ça, le C d'aubio (compilé par
   `aubio-rs` feature `builtin`) ne compile pas avec GCC ≥ 14.
-- Venv Demucs (Python 3.11, torch CUDA ; GTX 1650 ≈ 20 s par morceau) :
+- Venv Demucs (Python 3.11, torch CUDA ; ≈ 20 s par morceau sur un GPU de 4 Go) :
   ```
   uv venv --python 3.11 ~/.local/share/itg-charter/demucs-venv
   VIRTUAL_ENV=~/.local/share/itg-charter/demucs-venv uv pip install demucs torch torchaudio soundfile
   ```
   Autre interpréteur : `ITG_CHARTER_PYTHON=/chemin/python`. Sans Demucs : `--no-stems`.
-- Le jeu : `~/Downloads/ITGmania-1.1.0-Linux-no-songs/itgmania` ; données utilisateur et cache dans
-  `~/.itgmania/`. Pour tester en jeu : `-o ~/.itgmania/Songs/itg-charter`.
+- Le jeu : installation ITGmania dans `$ITGMANIA_DIR` (contient `Songs/`) ; données utilisateur et
+  cache dans `~/.itgmania/` (Linux). Pour tester en jeu : `-o ~/.itgmania/Songs/itg-charter`.
 
 ## Résultats de référence (à maintenir / améliorer)
 

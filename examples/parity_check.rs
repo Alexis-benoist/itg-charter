@@ -7,7 +7,8 @@
 //! The cache has no note data for `.sm` songs, so notes are read from the original
 //! file (`#STEPFILENAME`, relative to the game directory).
 //!
-//! Usage: cargo run --release --example parity_check [-- CACHE_DIR GAME_DIR]
+//! Usage: cargo run --release --example parity_check -- [CACHE_DIR [GAME_DIR]]
+//! (CACHE_DIR defaults to ~/.itgmania/Cache/Songs, GAME_DIR to $ITGMANIA_DIR).
 
 use itg_charter::parity::{Layout, TechCounts, analyze, rows_from_chart};
 use itg_charter::simfile::Simfile;
@@ -21,7 +22,13 @@ fn main() -> anyhow::Result<()> {
     let game_dir = std::env::args()
         .nth(2)
         .map(PathBuf::from)
-        .unwrap_or_else(|| dirs_home().join("Downloads/ITGmania-1.1.0-Linux-no-songs/itgmania"));
+        .or_else(|| std::env::var_os("ITGMANIA_DIR").map(PathBuf::from))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "game folder unknown: pass it as second argument or set ITGMANIA_DIR \
+                 (the folder that contains ITGmania's Songs/)"
+            )
+        })?;
     let layout = Layout::dance_single();
     let mut entries: Vec<_> = std::fs::read_dir(&dir)?
         .filter_map(|e| e.ok())

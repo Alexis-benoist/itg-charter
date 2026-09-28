@@ -4,10 +4,9 @@
 Programme Rust : `itg-charter song.mp3 -d easy,medium,hard --seed 42` → dossier de chanson
 ITGmania (`<out>/<Titre>/<Titre>.sm` + audio copié) avec un chart `dance-single` par difficulté.
 Même entrée + même seed ⇒ `.sm` identique à l'octet. Choix utilisateur : analyse via **aubio (FFI)**,
-séparation de pistes **Demucs dès la v1**. Le jeu est dans
-`~/Downloads/ITGmania-1.1.0-Linux-no-songs/itgmania` ; ses `Songs/` (JBEAN, SPEIRMIX, Eurobeat…,
-mp3/ogg + `.sm`) servent de vérité terrain. Projet vide dans `/home/alexis/itg-charter`
-(déjà `cargo init` + deps symphonia 0.6 / rustfft / clap / rand 0.8 / rand_chacha 0.3 / anyhow).
+séparation de pistes **Demucs dès la v1**. Une installation ITGmania (`$ITGMANIA_DIR`) et ses
+`Songs/` (packs communautaires : mp3/ogg + `.sm`) servent de vérité terrain. Point de départ : un
+projet vide (`cargo init` + deps symphonia 0.6 / rustfft / clap / rand 0.8 / rand_chacha 0.3 / anyhow).
 
 Recherches : TempoSync+FootGraph (netraular/stepmania-generator, docs/METHOD.md) — Viterbi pieds +
 densité par couches métriques, bat AutoStepper et DDC ; DDC (arXiv 1703.06891) — placement puis
@@ -24,7 +23,7 @@ aubio embarqué, **licence GPL-3.0**.
   - `stems.rs` — **Demucs (v1)** : sous-processus `python -m demucs -n htdemucs --shifts 0
     -o <cache> song.mp3` (shifts=0 : sinon décalage aléatoire, non déterministe) dans un venv dédié
     `uv venv --python 3.11 ~/.local/share/itg-charter/demucs-venv` + `uv pip install demucs torch`
-    (CUDA pour la GTX 1650 4 Go, `--segment 7` ; fallback `--device cpu`, ~2 min/morceau).
+    (CUDA sur un GPU de 4 Go, `--segment 7` ; fallback `--device cpu`, ~2 min/morceau).
     Stems (drums, bass, vocals, other) **mis en cache** dans `~/.cache/itg-charter/<sha256 audio>/`
     → le déterminisme seed ⇒ octets tient même si le GPU n'est pas bit-exact (commande
     `--device cpu` pour un calcul strictement reproductible). `--no-stems` pour s'en passer ;
@@ -88,7 +87,7 @@ Principe : **aucune règle biomécanique inventée par le LLM**. Deux sources é
 - Éval `#[ignore]`/exemple sur les chansons du jeu (release).
 
 ## Vérification
-`cargo test`, `cargo run --release --example eval -- ~/Downloads/.../itgmania/Songs`,
+`cargo test`, `cargo run --release --example eval_sync -- $ITGMANIA_DIR/Songs`,
 génération d'un morceau dans `~/.itgmania/Songs/itg-charter/` puis test en jeu par l'utilisateur.
 
 ## État (2026-09-27)
@@ -103,7 +102,7 @@ Reste : erreurs d'un demi-temps (~11 %), BPM variables, notes pendant les holds,
 
 ## Synchro (2026-09-27, suite)
 
-Plan détaillé : `~/.claude/plans/sleepy-soaring-pelican.md`. Résultats (split test, 400 morceaux) :
+Résultats (split test, 400 morceaux ; détails dans `eval/`) :
 - décision demi-temps apprise (`fit_sync`) : 79,8 % → 98,3 % de bonnes décisions ;
 - MP3 à tag LAME alignés sur le jeu : MP3 calés 47 % → 95 % ;
 - au total, morceaux calés sur BPM exact 76,8 % → 97,5 %, phase médiane 5,0 ms ;
