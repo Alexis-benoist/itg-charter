@@ -36,6 +36,9 @@ fn load_songs(dir: &std::path::Path, split: &str, max: usize) -> Vec<Song> {
     let mut songs = Vec::new();
     for path in find_simfiles(dir) {
         let Ok(sim) = Simfile::load(&path) else { continue };
+        if sim.is_generated() {
+            continue;
+        }
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         let title = sim
             .tag("TITLE")

@@ -31,6 +31,9 @@ fn main() -> anyhow::Result<()> {
     let mut songs = Vec::new();
     for path in find_simfiles(&dir) {
         let Ok(sim) = Simfile::load(&path) else { continue };
+        if sim.is_generated() {
+            continue;
+        }
         if let Some(m) = sim.tag("MUSIC").filter(|m| !m.is_empty()) {
             let music = path.parent().unwrap().join(m);
             if music.exists() {

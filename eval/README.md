@@ -21,3 +21,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `placement-test-baseline.txt` | nos notes tombent-elles là où l'humain les met ? (grille humaine imposée) — référence avant placement appris |
 | `placement-fit.txt` | ajustement du placement appris (log-loss train/test par difficulté, poids) |
 | `placement-test-learned.txt` | placement appris (régression logistique par difficulté) vs humains |
+| `placement-test-learned-clean.txt` | idem après exclusion des chansons générées (lien Songs/YouTube) et réentraînement ; + corrélation des densités par mesure |

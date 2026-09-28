@@ -164,6 +164,14 @@ impl Simfile {
         Simfile::parse(&text, is_ssc)
     }
 
+    /// Whether this simfile was written by itg-charter (credit or chart description).
+    /// Such files must never be used as human ground truth or training data, e.g. when
+    /// generated songs are linked into the game's Songs folder.
+    pub fn is_generated(&self) -> bool {
+        self.tag("CREDIT").is_some_and(|c| c.contains("itg-charter"))
+            || self.charts.iter().any(|c| c.description.contains("itg-charter"))
+    }
+
     pub fn tag(&self, key: &str) -> Option<&str> {
         self.tags.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
     }
@@ -616,6 +624,14 @@ mod tests {
         assert!((t.seconds(2.0) - 0.9).abs() < 1e-9); // stop on beat 2 not applied yet
         assert!((t.seconds(3.0) - 1.9).abs() < 1e-9);
         assert!((t.seconds(5.0) - 3.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn generated_simfiles_are_recognized() {
+        let generated = "#TITLE:x;\n#CREDIT:itg-charter 0.1.0 (seed 0);\n#BPMS:0=120;\n";
+        assert!(Simfile::parse(generated, false).unwrap().is_generated());
+        let human = "#TITLE:x;\n#CREDIT:J. Frederick;\n#BPMS:0=120;\n";
+        assert!(!Simfile::parse(human, false).unwrap().is_generated());
     }
 
     #[test]
