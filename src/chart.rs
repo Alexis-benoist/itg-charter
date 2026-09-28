@@ -225,7 +225,8 @@ pub fn place_notes_scaled(
         }
     };
 
-    let mut scored: Vec<(f32, u32, Candidate)> = match crate::placement::embedded_model() {
+    // (score for ranking, position, candidate, P(human row) when the learned model is used)
+    let mut scored: Vec<(f32, u32, Candidate, f32)> = match crate::placement::embedded_model() {
         // Learned placement: every allowed 12th/16th position of the active range, ranked
         // by P(a human puts a row here) (see `placement.rs`, measured with
         // `examples/eval_placement.rs`). Onset candidates keep their strength and kick
@@ -245,7 +246,7 @@ pub fn place_notes_scaled(
                     });
                     let p = learned.prob(d, &features.features(pos)) as f32;
                     let jitter = rng.gen_range(0.85..1.15f32);
-                    (p * jitter, pos, c)
+                    (p * jitter, pos, c, p)
                 })
                 .collect()
         }
@@ -255,15 +256,24 @@ pub fn place_notes_scaled(
                 let w = weight(snap_class(c.pos));
                 (w > 0.0).then(|| {
                     let jitter = rng.gen_range(0.85..1.15f32);
-                    (c.strength.max(0.3 * c.kick) * w * jitter, c.pos, *c)
+                    (c.strength.max(0.3 * c.kick) * w * jitter, c.pos, *c, 0.0)
                 })
             })
             .collect(),
     };
+    // With the learned model, the expected number of human rows is the sum of the
+    // probabilities (the model is calibrated: fitted by log loss).
+    let target = match crate::placement::embedded_model() {
+        Some(_) => {
+            let expected: f64 = scored.iter().map(|s| s.3 as f64).sum();
+            (expected * density).round().max(4.0) as usize
+        }
+        None => target,
+    };
     scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
 
     let mut chosen: BTreeMap<u32, Candidate> = BTreeMap::new();
-    for (_, pos, c) in &scored {
+    for (_, pos, c, _) in &scored {
         if chosen.len() >= target {
             break;
         }
