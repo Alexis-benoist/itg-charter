@@ -10,6 +10,7 @@ use crate::analysis::Stems;
 use crate::audio::decode_file;
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -19,7 +20,8 @@ const MODEL: &str = "htdemucs";
 #[derive(Clone, Debug, Default)]
 pub struct StemOptions {
     /// Python interpreter with `demucs` installed. Default: `$ITG_CHARTER_PYTHON`, then
-    /// `~/.local/share/itg-charter/demucs-venv/bin/python`.
+    /// `~/.local/share/itg-charter/demucs-venv/bin/python` (Linux/macOS) or
+    /// `%LOCALAPPDATA%\itg-charter\demucs-venv\Scripts\python.exe` (Windows).
     pub python: Option<PathBuf>,
     /// Torch device ("cuda" or "cpu"); Demucs picks one when unset.
     pub device: Option<String>,
@@ -27,8 +29,29 @@ pub struct StemOptions {
     pub cache_dir: Option<PathBuf>,
 }
 
+/// Home directory: `$HOME`, then `%USERPROFILE%` (Windows usually has no `HOME`), else ".".
 fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()))
+    home_from(std::env::var_os("HOME"), std::env::var_os("USERPROFILE"))
+}
+
+fn home_from(home: Option<OsString>, userprofile: Option<OsString>) -> PathBuf {
+    home.or(userprofile)
+        .map_or_else(|| PathBuf::from("."), PathBuf::from)
+}
+
+/// Default Demucs interpreter: the venv's `bin/python` under `~/.local/share` on Unix,
+/// `Scripts\python.exe` under `%LOCALAPPDATA%` (or `<home>\AppData\Local`) on Windows.
+fn default_python(windows: bool, home: &Path, local_app_data: Option<OsString>) -> PathBuf {
+    if windows {
+        local_app_data
+            .map_or_else(|| home.join("AppData").join("Local"), PathBuf::from)
+            .join("itg-charter")
+            .join("demucs-venv")
+            .join("Scripts")
+            .join("python.exe")
+    } else {
+        home.join(".local/share/itg-charter/demucs-venv/bin/python")
+    }
 }
 
 impl StemOptions {
@@ -36,7 +59,7 @@ impl StemOptions {
         self.python
             .clone()
             .or_else(|| std::env::var_os("ITG_CHARTER_PYTHON").map(PathBuf::from))
-            .unwrap_or_else(|| home().join(".local/share/itg-charter/demucs-venv/bin/python"))
+            .unwrap_or_else(|| default_python(cfg!(windows), &home(), std::env::var_os("LOCALAPPDATA")))
     }
 
     pub fn cache_dir(&self) -> PathBuf {
@@ -94,7 +117,7 @@ pub fn separate(audio: &Path, opts: &StemOptions) -> Result<Stems> {
     let python = opts.python();
     if !python.exists() {
         bail!(
-            "Demucs python not found at {} (see CLAUDE.md to install it, or use --no-stems)",
+            "Demucs python not found at {} (see the README's Demucs section to install it, set ITG_CHARTER_PYTHON, or use --no-stems)",
             python.display()
         );
     }
@@ -125,4 +148,40 @@ pub fn separate(audio: &Path, opts: &StemOptions) -> Result<Stems> {
     }
     let _ = std::fs::remove_dir_all(&tmp);
     load_cached(&dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn home_falls_back_to_userprofile_then_dot() {
+        let h = |a: Option<&str>, b: Option<&str>| home_from(a.map(Into::into), b.map(Into::into));
+        assert_eq!(h(Some("/home/u"), Some("C:/Users/u")), PathBuf::from("/home/u"));
+        assert_eq!(h(None, Some("C:/Users/u")), PathBuf::from("C:/Users/u"));
+        assert_eq!(h(None, None), PathBuf::from("."));
+    }
+
+    #[test]
+    fn default_python_per_os() {
+        let home = Path::new("/home/u");
+        assert_eq!(
+            default_python(false, home, Some("/ignored".into())),
+            PathBuf::from("/home/u/.local/share/itg-charter/demucs-venv/bin/python")
+        );
+        let venv = |base: &Path| {
+            base.join("itg-charter")
+                .join("demucs-venv")
+                .join("Scripts")
+                .join("python.exe")
+        };
+        assert_eq!(
+            default_python(true, home, Some("/lad".into())),
+            venv(Path::new("/lad"))
+        );
+        assert_eq!(
+            default_python(true, home, None),
+            venv(&home.join("AppData").join("Local"))
+        );
+    }
 }

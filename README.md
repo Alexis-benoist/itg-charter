@@ -45,9 +45,18 @@ uv venv --python 3.11 ~/.local/share/itg-charter/demucs-venv
 VIRTUAL_ENV=~/.local/share/itg-charter/demucs-venv uv pip install demucs torch torchaudio soundfile
 ```
 
+On Windows the default is `%LOCALAPPDATA%\itg-charter\demucs-venv` (interpreter
+`Scripts\python.exe`):
+
+```powershell
+uv venv --python 3.11 $env:LOCALAPPDATA\itg-charter\demucs-venv
+$env:VIRTUAL_ENV="$env:LOCALAPPDATA\itg-charter\demucs-venv"; uv pip install demucs torch torchaudio soundfile
+```
+
 (`uv`: https://docs.astral.sh/uv/. Another interpreter can be given with
 `ITG_CHARTER_PYTHON=/path/to/python`.) With an NVIDIA GPU a song takes about 20 s; `--device cpu`
-works without one, slower. Separated tracks are cached in `~/.cache/itg-charter/stems/`. Without
+works without one, slower. Separated tracks are cached in `~/.cache/itg-charter/stems/`
+(`%USERPROFILE%\.cache\...` on Windows, or `$XDG_CACHE_HOME/itg-charter/stems/`). Without
 Demucs, itg-charter prints a warning and charts the full mix; `--no-stems` skips it silently.
 
 ## Usage
