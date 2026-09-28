@@ -273,12 +273,46 @@ pub fn place_notes_scaled(
     scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
 
     let mut chosen: BTreeMap<u32, Candidate> = BTreeMap::new();
+    let fits = |chosen: &BTreeMap<u32, Candidate>, pos: u32| {
+        let lo = pos.saturating_sub(finest - 1);
+        chosen.range(lo..pos + finest).next().is_none()
+    };
+    if crate::placement::embedded_model().is_some() {
+        // Spread the rows over the song like a human would: each measure gets a share
+        // of the target proportional to its expected number of human rows (sum of the
+        // probabilities), by largest remainder; the best positions of the measure fill it.
+        const MEASURE: u32 = 4 * ROWS_PER_BEAT;
+        let mut expected: BTreeMap<u32, f64> = BTreeMap::new();
+        for s in &scored {
+            *expected.entry(s.1 / MEASURE).or_default() += s.3 as f64;
+        }
+        let total: f64 = expected.values().sum::<f64>().max(1e-9);
+        let exact: Vec<(u32, f64)> = expected
+            .iter()
+            .map(|(m, e)| (*m, e / total * target as f64))
+            .collect();
+        let mut quota: BTreeMap<u32, usize> = exact.iter().map(|(m, x)| (*m, x.floor() as usize)).collect();
+        let mut remainders: Vec<(f64, u32)> = exact.iter().map(|(m, x)| (x - x.floor(), *m)).collect();
+        remainders.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        let missing = target.saturating_sub(quota.values().sum());
+        for (_, m) in remainders.iter().take(missing) {
+            *quota.get_mut(m).unwrap() += 1;
+        }
+        for (_, pos, c, _) in &scored {
+            let q = quota.get_mut(&(pos / MEASURE)).unwrap();
+            if *q > 0 && fits(&chosen, *pos) {
+                chosen.insert(*pos, *c);
+                *q -= 1;
+            }
+        }
+    }
+    // Fill up to the target with the best remaining positions (all of them without the
+    // learned model).
     for (_, pos, c, _) in &scored {
         if chosen.len() >= target {
             break;
         }
-        let lo = pos.saturating_sub(finest - 1);
-        if chosen.range(lo..pos + finest).next().is_none() {
+        if fits(&chosen, *pos) {
             chosen.insert(*pos, *c);
         }
     }

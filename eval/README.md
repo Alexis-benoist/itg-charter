@@ -23,3 +23,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `placement-test-learned.txt` | placement appris (régression logistique par difficulté) vs humains |
 | `placement-test-learned-clean.txt` | idem après exclusion des chansons générées (lien Songs/YouTube) et réentraînement ; + corrélation des densités par mesure |
 | `placement-test-1a-expected-count.txt` | 1a : nombre naturel = somme des probabilités du placement appris |
+| `placement-test-1b-measure-quota.txt` | 1b : quotas par mesure au prorata de la densité attendue |
