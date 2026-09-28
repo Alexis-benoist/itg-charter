@@ -26,3 +26,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `placement-test-1b-measure-quota.txt` | 1b : quotas par mesure au prorata de la densité attendue |
 | `placement-test-1b-share{0.5,0.75}.txt` | quotas partiels : retombent sur la répartition de 1a (pas d'entre-deux) |
 | `placement-test-rhythm-baseline.txt`, `placement-test-2-reuse{0.0,0.1,0.3,1.0}.txt` | reprise du rythme des mesures similaires : mesure + bonus β |
+| `placement-test-2-reuse-challenge-only.txt` | bonus de reprise du rythme en Challenge seulement (retenu) |

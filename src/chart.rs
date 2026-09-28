@@ -52,8 +52,12 @@ impl Default for GenOptions {
 pub const MEASURE_QUOTA_SHARE: f64 = 1.0;
 
 /// Bonus added to the placement score of positions that repeat the rhythm of an
-/// earlier, similar-sounding measure (0 = off). Chosen with `examples/eval_placement.rs`.
-pub const RHYTHM_REUSE_BONUS: f32 = 0.1;
+/// earlier, similar-sounding measure (0 = off), per difficulty. Measured with
+/// `examples/eval_placement.rs` (test split): no effect on the F-score; in Challenge
+/// it brings the share of repeated rhythms closer to the human one (18% -> 29.5%,
+/// human 44%) while in easier slots, already at or above the human share, it would
+/// only add repetition. Hence Challenge only.
+pub const RHYTHM_REUSE_BONUS: [f32; 5] = [0.0, 0.0, 0.0, 0.0, 0.1];
 
 /// Picks rows by decreasing score: first within each measure's quota (if any), then up
 /// to `target` overall, never closer than `finest` 48ths to another row.
@@ -345,7 +349,8 @@ pub fn place_notes_scaled(
         quota
     });
     let mut chosen = select_rows(&scored, quota.as_ref(), target, finest);
-    if learned && RHYTHM_REUSE_BONUS > 0.0 {
+    let reuse_bonus = RHYTHM_REUSE_BONUS[d.index()];
+    if learned && reuse_bonus > 0.0 {
         // Second pass: favour, in each measure that sounds like an earlier one, the
         // rhythm chosen for that earlier measure (humans often, not always, repeat it).
         let last = scored.iter().map(|s| s.1).max().unwrap_or(0) / MEASURE;
@@ -360,7 +365,7 @@ pub fn place_notes_scaled(
         }
         for s in scored.iter_mut() {
             if echo.contains(&s.1) {
-                s.0 += RHYTHM_REUSE_BONUS;
+                s.0 += reuse_bonus;
             }
         }
         scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
