@@ -1,0 +1,8 @@
+split test, songs 300, seed 1, human grid forced
+           |      natural (P / R / F)      |    equal count (P / R / F)    | chance F (equal count)
+Beginner   |  55.8%  41.4%  47.5% ( 243) |  62.0%  62.0%  62.0% ( 243) |  16.1%
+Easy       |  68.6%  45.4%  54.7% ( 259) |  70.9%  70.9%  70.9% ( 259) |  32.7%
+Medium     |  74.5%  54.8%  63.2% ( 266) |  73.9%  73.8%  73.9% ( 266) |  42.8%
+Hard       |  75.9%  62.2%  68.4% ( 269) |  74.9%  74.7%  74.8% ( 269) |  52.1%
+Challenge  |  78.1%  66.6%  71.9% ( 231) |  77.5%  76.9%  77.2% ( 231) |  67.2%
+All        | F natural 66.0% | F equal count 74.3% | F chance 51.1%

@@ -576,6 +576,8 @@ pub struct SongAnalysis {
     pub mix: Layer,
     pub kick: Layer,
     pub stems: Option<StemLayers>,
+    /// Energy-flux envelopes of the mix in `HALF_BEAT_BANDS` (kick, low-mid, mid, high).
+    pub bands: Vec<Envelope>,
     pub diagnostics: Diagnostics,
 }
 
@@ -695,6 +697,7 @@ impl SongAnalysis {
             mix,
             kick,
             stems: layers,
+            bands,
             diagnostics,
         }
     }

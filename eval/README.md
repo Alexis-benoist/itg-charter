@@ -19,3 +19,5 @@ actuel 140 / 0,6 oct : 82,5 % / 89,2 % — sans prior : 68,5 % / 68,5 % —
 histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 % / 86,8 %.
 | `music-signal-train.txt` | la musique prédit-elle les flèches humaines ? (contexte : Δhauteur du mix, type de frappe, accent) |
 | `placement-test-baseline.txt` | nos notes tombent-elles là où l'humain les met ? (grille humaine imposée) — référence avant placement appris |
+| `placement-fit.txt` | ajustement du placement appris (log-loss train/test par difficulté, poids) |
+| `placement-test-learned.txt` | placement appris (régression logistique par difficulté) vs humains |

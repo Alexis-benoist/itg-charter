@@ -12,6 +12,7 @@ pub mod difficulty;
 pub mod model;
 pub mod music;
 pub mod parity;
+pub mod placement;
 pub mod simfile;
 pub mod song;
 pub mod stems;

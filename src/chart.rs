@@ -225,16 +225,41 @@ pub fn place_notes_scaled(
         }
     };
 
-    let mut scored: Vec<(f32, u32, Candidate)> = cands
-        .iter()
-        .filter_map(|c| {
-            let w = weight(snap_class(c.pos));
-            (w > 0.0).then(|| {
-                let jitter = rng.gen_range(0.85..1.15f32);
-                (c.strength.max(0.3 * c.kick) * w * jitter, c.pos, *c)
+    let mut scored: Vec<(f32, u32, Candidate)> = match crate::placement::embedded_model() {
+        // Learned placement: every allowed 12th/16th position of the active range, ranked
+        // by P(a human puts a row here) (see `placement.rs`, measured with
+        // `examples/eval_placement.rs`). Onset candidates keep their strength and kick
+        // for jumps and holds.
+        Some(learned) => {
+            let features = crate::placement::PlacementFeatures::new(a);
+            let by_pos: BTreeMap<u32, Candidate> = cands.iter().map(|c| (c.pos, *c)).collect();
+            let first = (grid.beat(start - 0.05) * ROWS_PER_BEAT as f64).ceil().max(0.0) as u32;
+            let last = (grid.beat(end) * ROWS_PER_BEAT as f64).floor().max(0.0) as u32;
+            (first..=last)
+                .filter(|&pos| crate::placement::is_candidate(pos) && weight(snap_class(pos)) > 0.0)
+                .map(|pos| {
+                    let c = by_pos.get(&pos).copied().unwrap_or(Candidate {
+                        pos,
+                        strength: 0.0,
+                        kick: 0.0,
+                    });
+                    let p = learned.prob(d, &features.features(pos)) as f32;
+                    let jitter = rng.gen_range(0.85..1.15f32);
+                    (p * jitter, pos, c)
+                })
+                .collect()
+        }
+        None => cands
+            .iter()
+            .filter_map(|c| {
+                let w = weight(snap_class(c.pos));
+                (w > 0.0).then(|| {
+                    let jitter = rng.gen_range(0.85..1.15f32);
+                    (c.strength.max(0.3 * c.kick) * w * jitter, c.pos, *c)
+                })
             })
-        })
-        .collect();
+            .collect(),
+    };
     scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
 
     let mut chosen: BTreeMap<u32, Candidate> = BTreeMap::new();

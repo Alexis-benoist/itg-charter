@@ -201,7 +201,8 @@ fn default_charts_are_full_range_and_meters_are_configurable() {
             ("Easy", 4),
             ("Medium", 6),
             ("Hard", 8),
-            ("Challenge", 9)
+            // The requested meter (10) is reached since the learned placement.
+            ("Challenge", 10)
         ]
     );
 
