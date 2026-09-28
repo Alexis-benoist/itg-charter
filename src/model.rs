@@ -364,6 +364,9 @@ impl Model {
         for (i, path) in files.iter().enumerate() {
             progress(i, files.len());
             let Ok(sim) = Simfile::load(path) else { continue };
+            if sim.is_generated() {
+                continue;
+            }
             if let Some(bpm) = sim
                 .charts
                 .iter()

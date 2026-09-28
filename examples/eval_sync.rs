@@ -92,6 +92,9 @@ fn main() -> anyhow::Result<()> {
     let mut cases = Vec::new();
     for path in find_simfiles(&dir) {
         let Ok(sim) = Simfile::load(&path) else { continue };
+        if sim.is_generated() {
+            continue;
+        }
         let Some(chart) = sim.charts.first() else { continue };
         let Ok(timing) = sim.timing(chart) else { continue };
         if !timing.is_constant() || sim.charts.iter().any(|c| c.tags.iter().any(|(k, _)| k == "BPMS")) {

@@ -9,6 +9,10 @@
 //! - recall: share of the human rows we reproduce;
 //! - F-score: harmonic mean.
 //!
+//! "measure corr" is the mean over charts of the Pearson correlation between our and
+//! the human number of rows per measure (does the density follow the song like the
+//! human's does?).
+//!
 //! Two variants: "natural" (the generator's own number of rows) and "equal count" (as
 //! many rows as the human chart, which judges *where* independently of *how many*).
 //! As a reference, "chance" is the F-score of placing the same number of rows at random
@@ -56,6 +60,26 @@ struct Counts {
     human: u64,
     matched: u64,
     charts: u64,
+    corr_sum: f64,
+    corr_n: u64,
+}
+
+/// Pearson correlation of rows per measure, over the measures of the human chart.
+fn measure_correlation(ours: &BTreeSet<u32>, human: &BTreeSet<u32>) -> Option<f64> {
+    let (first, last) = (human.first()? / 192, human.last()? / 192);
+    let count = |set: &BTreeSet<u32>, m: u32| set.range(m * 192..(m + 1) * 192).count() as f64;
+    let pairs: Vec<(f64, f64)> = (first..=last)
+        .map(|m| (count(ours, m), count(human, m)))
+        .collect();
+    let n = pairs.len() as f64;
+    let (mx, my) = (
+        pairs.iter().map(|p| p.0).sum::<f64>() / n,
+        pairs.iter().map(|p| p.1).sum::<f64>() / n,
+    );
+    let sxy: f64 = pairs.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum();
+    let sxx: f64 = pairs.iter().map(|p| (p.0 - mx).powi(2)).sum();
+    let syy: f64 = pairs.iter().map(|p| (p.1 - my).powi(2)).sum();
+    (sxx > 0.0 && syy > 0.0).then(|| sxy / (sxx * syy).sqrt())
 }
 
 impl Counts {
@@ -64,6 +88,15 @@ impl Counts {
         self.human += human as u64;
         self.matched += matched as u64;
         self.charts += 1;
+    }
+    fn add_corr(&mut self, c: Option<f64>) {
+        if let Some(c) = c {
+            self.corr_sum += c;
+            self.corr_n += 1;
+        }
+    }
+    fn corr(&self) -> f64 {
+        self.corr_sum / self.corr_n.max(1) as f64
     }
     fn prf(&self) -> (f64, f64, f64) {
         let p = self.matched as f64 / self.ours.max(1) as f64;
@@ -99,6 +132,9 @@ fn main() -> anyhow::Result<()> {
     let mut songs = Vec::new();
     for path in find_simfiles(&dir) {
         let Ok(sim) = Simfile::load(&path) else { continue };
+        if sim.is_generated() {
+            continue;
+        }
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         let title = sim
             .tag("TITLE")
@@ -186,7 +222,11 @@ fn main() -> anyhow::Result<()> {
                         };
                         let ours = place(1.0);
                         let m = ours.intersection(&human).count();
-                        natural.lock().unwrap()[d.index()].add(ours.len(), human.len(), m);
+                        {
+                            let mut nat = natural.lock().unwrap();
+                            nat[d.index()].add(ours.len(), human.len(), m);
+                            nat[d.index()].add_corr(measure_correlation(&ours, &human));
+                        }
                         // Equal count: rescale the density (two refinements of the ratio).
                         let mut density = human.len() as f64 / ours.len().max(1) as f64;
                         let mut same = place(density);
@@ -195,7 +235,11 @@ fn main() -> anyhow::Result<()> {
                             same = place(density);
                         }
                         let m = same.intersection(&human).count();
-                        equal.lock().unwrap()[d.index()].add(same.len(), human.len(), m);
+                        {
+                            let mut eq = equal.lock().unwrap();
+                            eq[d.index()].add(same.len(), human.len(), m);
+                            eq[d.index()].add_corr(measure_correlation(&same, &human));
+                        }
                         let span = (human.last().unwrap() - human.first().unwrap()) / 12 + 1;
                         let expected = (human.len() * human.len()) as f64 / span as f64;
                         chance.lock().unwrap()[d.index()].add(
@@ -221,8 +265,8 @@ fn main() -> anyhow::Result<()> {
     );
     let _ = writeln!(
         out,
-        "{:<10} | {:^29} | {:^29} | {:^22}",
-        "", "natural (P / R / F)", "equal count (P / R / F)", "chance F (equal count)"
+        "{:<10} | {:^29} | {:^29} | {:^22} | {:^19}",
+        "", "natural (P / R / F)", "equal count (P / R / F)", "chance F (equal count)", "measure corr nat/eq"
     );
     let mut totals = [Counts::default(); 3];
     for d in Difficulty::ALL {
@@ -232,7 +276,7 @@ fn main() -> anyhow::Result<()> {
         let (_, _, hf) = human_vs_human[i].prf();
         let _ = writeln!(
             out,
-            "{:<10} | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>5.1}%",
+            "{:<10} | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>21.1}% | {:>8.3} / {:.3}",
             d.name(),
             100.0 * np,
             100.0 * nr,
@@ -243,21 +287,27 @@ fn main() -> anyhow::Result<()> {
             100.0 * ef,
             equal[i].charts,
             100.0 * hf,
+            natural[i].corr(),
+            equal[i].corr(),
         );
         for (t, c) in totals.iter_mut().zip([natural[i], equal[i], human_vs_human[i]]) {
             t.ours += c.ours;
             t.human += c.human;
             t.matched += c.matched;
             t.charts += c.charts;
+            t.corr_sum += c.corr_sum;
+            t.corr_n += c.corr_n;
         }
     }
     let _ = writeln!(
         out,
-        "{:<10} | F natural {:.1}% | F equal count {:.1}% | F chance {:.1}%",
+        "{:<10} | F natural {:.1}% | F equal count {:.1}% | F chance {:.1}% | measure corr {:.3} / {:.3}",
         "All",
         100.0 * totals[0].prf().2,
         100.0 * totals[1].prf().2,
-        100.0 * totals[2].prf().2
+        100.0 * totals[2].prf().2,
+        totals[0].corr(),
+        totals[1].corr()
     );
     print!("{out}");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("eval");
