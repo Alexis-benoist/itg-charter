@@ -28,6 +28,12 @@ itg-charter train <Songs/>              # réentraîne model/model.json
     demi-temps et le prior de tempo ; toujours rapporter le score sur le split **test** ;
   - `cargo run --release --example eval_charts -- $SONGS 40 [parity_weight temperature repeat_bonus]` —
     stats des charts générés vs distribution humaine (objectif : `outside human range: 0`) ;
+  - `cargo run --release --example eval_placement -- $SONGS --max 300 --split test [--tag T]` —
+    nos lignes tombent-elles là où l'humain les met (grille humaine imposée) : précision / rappel /
+    F, corrélation des densités par mesure, reprise du rythme des mesures similaires ;
+  - `cargo run --release --example fit_placement -- $SONGS` — réajuste `model/placement.json`
+    (régression logistique par difficulté, train ; log-loss rapportée sur test) ;
+  - `cargo run --release --example music_signal -- $SONGS` — la musique prédit-elle les flèches ?
   - `ITGMANIA_DIR=… cargo run --release --example parity_check` — notre parité vs `#TECHCOUNTS`
     du cache du jeu (`~/.itgmania/Cache/Songs`).
   Relancer l'éval concernée après toute modification de l'analyse, du générateur ou de la parité.
@@ -41,7 +47,9 @@ itg-charter train <Songs/>              # réentraîne model/model.json
 | `analysis.rs` | aubio (onsets spectral-flux, beat tracker) + fit BPM constant multi-résolution, phase, temps fort (kick) |
 | `model.rs` | stats apprises sur les charts humains : n-gramme de flèches, densités, snaps, sauts, holds, tech, meter |
 | `parity.rs` | **port Rust de la parité d'ITGmania** (`StepParity*.cpp`, `TechCounts.cpp`) |
-| `chart.rs` | placement des notes (onsets → grille) + choix des flèches (beam search) + meter |
+| `placement.rs` | placement appris : P(un humain met une ligne ici \| 17 indices audio/métriques), `model/placement.json` |
+| `chart.rs` | placement des notes (probabilités apprises, quotas par mesure, reprise du rythme) + choix des flèches (beam search) + meter |
+| `music.rs` | indices musicaux par note (hauteur yinfast, type de frappe, accent) ; split train/test partagé (`split_of`) |
 | `simfile.rs` | lecture `.sm`/`.ssc`, timing, écriture `.sm` |
 | `difficulty.rs` | les 5 difficultés, parsing, sel de seed par difficulté |
 | `synth.rs` | signaux de test synthétiques (tests + fixture) |
@@ -93,5 +101,12 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   97,5 % calés (< 30 ms), 1,7 % d'erreurs d'un demi-temps, phase médiane 5,0 ms, 94 % sous 20 ms.
   Limites connues : choix d'octave (le prior seul n'y fait rien, cf. `fit_octave`) ; boucles EDM
   synthétiques à contretemps (tests `#[ignore]` dans `analysis.rs`).
+- Placement (split test, 300 morceaux, grille humaine) : F-score 70,0 % avec notre nombre de
+  lignes, 73,0 % à nombre égal (hasard 49,7 %) ; corrélation des densités par mesure 0,32 ;
+  reprise du rythme des mesures similaires 46,6 % (humain 46,0 %).
+- Flèches ↔ musique : la hauteur du mix ne prédit pas la direction (corrélation ≈ 0) ; seul
+  l'accent compte (sauts ×2), cf. `eval/music-signal-train.txt`.
+- Données : `Simfile::is_generated()` exclut nos propres simfiles (liens vers des chansons
+  générées dans Songs/) de tout entraînement et de toute évaluation.
 - Charts (40 morceaux × 5 difficultés) : toutes les médianes (NPS, sauts, holds, crossovers,
   footswitches, jacks, double-steps, meter) dans l'intervalle p10–p90 humain.
