@@ -44,6 +44,13 @@ impl Default for GenOptions {
     }
 }
 
+/// Share of the rows spread over measures in proportion to their expected human
+/// density; the rest go to the best positions of the whole song. Measured with
+/// `examples/eval_placement.rs` (test split): 1.0 gives a per-measure density
+/// correlation of 0.320 (F natural 70.0%); 0.75 and 0.5 fall back to the global
+/// ranking's 0.27 (F 70.4%) — there is no middle ground.
+pub const MEASURE_QUOTA_SHARE: f64 = 1.0;
+
 /// A placed row, before arrows are chosen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Note {
@@ -282,6 +289,7 @@ pub fn place_notes_scaled(
         // of the target proportional to its expected number of human rows (sum of the
         // probabilities), by largest remainder; the best positions of the measure fill it.
         const MEASURE: u32 = 4 * ROWS_PER_BEAT;
+        let quota_rows = (target as f64 * MEASURE_QUOTA_SHARE).round() as usize;
         let mut expected: BTreeMap<u32, f64> = BTreeMap::new();
         for s in &scored {
             *expected.entry(s.1 / MEASURE).or_default() += s.3 as f64;
@@ -289,12 +297,12 @@ pub fn place_notes_scaled(
         let total: f64 = expected.values().sum::<f64>().max(1e-9);
         let exact: Vec<(u32, f64)> = expected
             .iter()
-            .map(|(m, e)| (*m, e / total * target as f64))
+            .map(|(m, e)| (*m, e / total * quota_rows as f64))
             .collect();
         let mut quota: BTreeMap<u32, usize> = exact.iter().map(|(m, x)| (*m, x.floor() as usize)).collect();
         let mut remainders: Vec<(f64, u32)> = exact.iter().map(|(m, x)| (x - x.floor(), *m)).collect();
         remainders.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
-        let missing = target.saturating_sub(quota.values().sum());
+        let missing = quota_rows.saturating_sub(quota.values().sum());
         for (_, m) in remainders.iter().take(missing) {
             *quota.get_mut(m).unwrap() += 1;
         }
