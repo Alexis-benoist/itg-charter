@@ -55,6 +55,55 @@ jobs:
           path: out-a/
           if-no-files-found: error
 
+  # Home / default Demucs interpreter paths differ per OS (HOME vs USERPROFILE,
+  # bin/python vs Scripts\python.exe): run their unit tests and check at runtime that,
+  # without a Demucs venv, `gen` falls back to the full mix, names the expected default
+  # interpreter and writes nothing in the current directory.
+  portability:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Path unit tests
+        run: cargo test --lib "stems::"
+      - name: No Demucs venv - full-mix fallback, default paths, clean cwd
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --release
+          snapshot() { git status --porcelain --ignored --untracked-files=all | grep -v ' target/' || true; }
+          before=$(snapshot)
+          bin=target/release/itg-charter
+          unset ITG_CHARTER_PYTHON XDG_CACHE_HOME
+          "$bin" gen tests/fixtures/test_song.mp3 --no-stems -s 42 -o "$RUNNER_TEMP/no-stems"
+          ls "$RUNNER_TEMP"/no-stems/*/*.sm
+          check() { # <expected python path> <env args...>
+            expected="$1"; shift
+            env "$@" "$bin" gen tests/fixtures/test_song.mp3 -s 42 -o "$RUNNER_TEMP/stems" 2>&1 | tee run.log
+            ls "$RUNNER_TEMP"/stems/*/*.sm
+            grep -F "full mix" run.log
+            grep -F "Demucs python not found at $expected " run.log
+            rm run.log
+          }
+          if [ "$RUNNER_OS" = Windows ]; then
+            # Git Bash leaves these Windows variables in native form (C:\Users\...).
+            check "$LOCALAPPDATA\\itg-charter\\demucs-venv\\Scripts\\python.exe"
+            # No HOME (usual outside Git Bash) and no LOCALAPPDATA: USERPROFILE fallback.
+            check "$USERPROFILE\\AppData\\Local\\itg-charter\\demucs-venv\\Scripts\\python.exe" -u HOME -u LOCALAPPDATA
+          else
+            check "$HOME/.local/share/itg-charter/demucs-venv/bin/python"
+          fi
+          # Nothing written relative to the current directory (stems cache included).
+          after=$(snapshot)
+          if [ "$before" != "$after" ]; then
+            echo "::error::files written in the current directory"; diff <(echo "$before") <(echo "$after"); exit 1
+          fi
+
   # Every push to main (and every v* tag) publishes a GitHub release with binaries for
   # all platforms, once the checks and the determinism test have passed. Pushes to
   # main get the version vMAJOR.MINOR.<run number> (MAJOR.MINOR from Cargo.toml).
