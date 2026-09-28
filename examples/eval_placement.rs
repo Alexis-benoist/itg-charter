@@ -13,6 +13,11 @@
 //! the human number of rows per measure (does the density follow the song like the
 //! human's does?).
 //!
+//! "rhythm reuse" looks at measures that sound like an earlier measure (audio
+//! fingerprint cosine >= 0.9, see `chart::similar_earlier_measures`): the share where
+//! the rows of the measure repeat the rows of that earlier measure, for the human chart
+//! and for ours (natural count).
+//!
 //! Two variants: "natural" (the generator's own number of rows) and "equal count" (as
 //! many rows as the human chart, which judges *where* independently of *how many*).
 //! As a reference, "chance" is the F-score of placing the same number of rows at random
@@ -27,7 +32,7 @@
 
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
 use itg_charter::audio::decode_file;
-use itg_charter::chart::place_notes_scaled;
+use itg_charter::chart::{measure_fingerprints, place_notes_scaled, similar_earlier_measures};
 use itg_charter::difficulty::Difficulty;
 use itg_charter::model::{Model, find_simfiles};
 use itg_charter::music::split_of;
@@ -62,6 +67,14 @@ struct Counts {
     charts: u64,
     corr_sum: f64,
     corr_n: u64,
+    reuse_pairs: u64,
+    reuse_human: u64,
+    reuse_ours: u64,
+}
+
+/// Rows of measure `m`, relative to its start.
+fn rhythm(set: &BTreeSet<u32>, m: u32) -> Vec<u32> {
+    set.range(m * 192..(m + 1) * 192).map(|p| p - m * 192).collect()
 }
 
 /// Pearson correlation of rows per measure, over the measures of the human chart.
@@ -94,6 +107,24 @@ impl Counts {
             self.corr_sum += c;
             self.corr_n += 1;
         }
+    }
+    fn add_reuse(&mut self, ours: &BTreeSet<u32>, human: &BTreeSet<u32>, similar: &[Option<u32>]) {
+        let (first, last) = (human.first().unwrap() / 192, human.last().unwrap() / 192);
+        for m in first..=last {
+            let Some(r) = similar.get(m as usize).copied().flatten() else {
+                continue;
+            };
+            if r < first {
+                continue;
+            }
+            self.reuse_pairs += 1;
+            self.reuse_human += (rhythm(human, m) == rhythm(human, r)) as u64;
+            self.reuse_ours += (rhythm(ours, m) == rhythm(ours, r)) as u64;
+        }
+    }
+    fn reuse(&self) -> (f64, f64) {
+        let n = self.reuse_pairs.max(1) as f64;
+        (self.reuse_human as f64 / n, self.reuse_ours as f64 / n)
     }
     fn corr(&self) -> f64 {
         self.corr_sum / self.corr_n.max(1) as f64
@@ -201,6 +232,8 @@ fn main() -> anyhow::Result<()> {
                         ..AnalysisOptions::default()
                     };
                     let a = SongAnalysis::compute(&audio, None, &opts);
+                    let last_measure = (a.grid.beat(a.duration).max(0.0) / 4.0) as u32 + 1;
+                    let similar = similar_earlier_measures(&measure_fingerprints(&a, last_measure), 0.9);
                     for chart in &song.sim.charts {
                         if chart.steps_type != "dance-single" {
                             continue;
@@ -226,6 +259,7 @@ fn main() -> anyhow::Result<()> {
                             let mut nat = natural.lock().unwrap();
                             nat[d.index()].add(ours.len(), human.len(), m);
                             nat[d.index()].add_corr(measure_correlation(&ours, &human));
+                            nat[d.index()].add_reuse(&ours, &human, &similar);
                         }
                         // Equal count: rescale the density (two refinements of the ratio).
                         let mut density = human.len() as f64 / ours.len().max(1) as f64;
@@ -265,7 +299,7 @@ fn main() -> anyhow::Result<()> {
     );
     let _ = writeln!(
         out,
-        "{:<10} | {:^29} | {:^29} | {:^22} | {:^19}",
+        "{:<10} | {:^29} | {:^29} | {:^22} | {:^19} | rhythm reuse human / ours (natural)",
         "", "natural (P / R / F)", "equal count (P / R / F)", "chance F (equal count)", "measure corr nat/eq"
     );
     let mut totals = [Counts::default(); 3];
@@ -276,7 +310,7 @@ fn main() -> anyhow::Result<()> {
         let (_, _, hf) = human_vs_human[i].prf();
         let _ = writeln!(
             out,
-            "{:<10} | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>21.1}% | {:>8.3} / {:.3}",
+            "{:<10} | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>5.1}% {:>5.1}% {:>5.1}% ({:>4}) | {:>21.1}% | {:>8.3} / {:.3} | {:>5.1}% / {:.1}% ({} pairs)",
             d.name(),
             100.0 * np,
             100.0 * nr,
@@ -289,6 +323,9 @@ fn main() -> anyhow::Result<()> {
             100.0 * hf,
             natural[i].corr(),
             equal[i].corr(),
+            100.0 * natural[i].reuse().0,
+            100.0 * natural[i].reuse().1,
+            natural[i].reuse_pairs,
         );
         for (t, c) in totals.iter_mut().zip([natural[i], equal[i], human_vs_human[i]]) {
             t.ours += c.ours;
@@ -297,17 +334,22 @@ fn main() -> anyhow::Result<()> {
             t.charts += c.charts;
             t.corr_sum += c.corr_sum;
             t.corr_n += c.corr_n;
+            t.reuse_pairs += c.reuse_pairs;
+            t.reuse_human += c.reuse_human;
+            t.reuse_ours += c.reuse_ours;
         }
     }
     let _ = writeln!(
         out,
-        "{:<10} | F natural {:.1}% | F equal count {:.1}% | F chance {:.1}% | measure corr {:.3} / {:.3}",
+        "{:<10} | F natural {:.1}% | F equal count {:.1}% | F chance {:.1}% | measure corr {:.3} / {:.3} | rhythm reuse human {:.1}% ours {:.1}%",
         "All",
         100.0 * totals[0].prf().2,
         100.0 * totals[1].prf().2,
         100.0 * totals[2].prf().2,
         totals[0].corr(),
-        totals[1].corr()
+        totals[1].corr(),
+        100.0 * totals[0].reuse().0,
+        100.0 * totals[0].reuse().1
     );
     print!("{out}");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("eval");

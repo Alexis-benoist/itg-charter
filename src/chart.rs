@@ -51,6 +51,46 @@ impl Default for GenOptions {
 /// ranking's 0.27 (F 70.4%) — there is no middle ground.
 pub const MEASURE_QUOTA_SHARE: f64 = 1.0;
 
+/// Bonus added to the placement score of positions that repeat the rhythm of an
+/// earlier, similar-sounding measure (0 = off). Chosen with `examples/eval_placement.rs`.
+pub const RHYTHM_REUSE_BONUS: f32 = 0.1;
+
+/// Picks rows by decreasing score: first within each measure's quota (if any), then up
+/// to `target` overall, never closer than `finest` 48ths to another row.
+fn select_rows(
+    scored: &[(f32, u32, Candidate, f32)],
+    quota: Option<&BTreeMap<u32, usize>>,
+    target: usize,
+    finest: u32,
+) -> BTreeMap<u32, Candidate> {
+    let mut chosen: BTreeMap<u32, Candidate> = BTreeMap::new();
+    let fits = |chosen: &BTreeMap<u32, Candidate>, pos: u32| {
+        let lo = pos.saturating_sub(finest - 1);
+        chosen.range(lo..pos + finest).next().is_none()
+    };
+    if let Some(quota) = quota {
+        let mut left = quota.clone();
+        for (_, pos, c, _) in scored {
+            if let Some(q) = left.get_mut(&(pos / (4 * ROWS_PER_BEAT)))
+                && *q > 0
+                && fits(&chosen, *pos)
+            {
+                chosen.insert(*pos, *c);
+                *q -= 1;
+            }
+        }
+    }
+    for (_, pos, c, _) in scored {
+        if chosen.len() >= target {
+            break;
+        }
+        if fits(&chosen, *pos) {
+            chosen.insert(*pos, *c);
+        }
+    }
+    chosen
+}
+
 /// A placed row, before arrows are chosen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Note {
@@ -279,16 +319,12 @@ pub fn place_notes_scaled(
     };
     scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
 
-    let mut chosen: BTreeMap<u32, Candidate> = BTreeMap::new();
-    let fits = |chosen: &BTreeMap<u32, Candidate>, pos: u32| {
-        let lo = pos.saturating_sub(finest - 1);
-        chosen.range(lo..pos + finest).next().is_none()
-    };
-    if crate::placement::embedded_model().is_some() {
-        // Spread the rows over the song like a human would: each measure gets a share
-        // of the target proportional to its expected number of human rows (sum of the
-        // probabilities), by largest remainder; the best positions of the measure fill it.
-        const MEASURE: u32 = 4 * ROWS_PER_BEAT;
+    const MEASURE: u32 = 4 * ROWS_PER_BEAT;
+    let learned = crate::placement::embedded_model().is_some();
+    // Spread the rows over the song like a human would: each measure gets a share of
+    // the target proportional to its expected number of human rows (sum of the
+    // probabilities), by largest remainder; the best positions of the measure fill it.
+    let quota: Option<BTreeMap<u32, usize>> = learned.then(|| {
         let quota_rows = (target as f64 * MEASURE_QUOTA_SHARE).round() as usize;
         let mut expected: BTreeMap<u32, f64> = BTreeMap::new();
         for s in &scored {
@@ -306,23 +342,29 @@ pub fn place_notes_scaled(
         for (_, m) in remainders.iter().take(missing) {
             *quota.get_mut(m).unwrap() += 1;
         }
-        for (_, pos, c, _) in &scored {
-            let q = quota.get_mut(&(pos / MEASURE)).unwrap();
-            if *q > 0 && fits(&chosen, *pos) {
-                chosen.insert(*pos, *c);
-                *q -= 1;
+        quota
+    });
+    let mut chosen = select_rows(&scored, quota.as_ref(), target, finest);
+    if learned && RHYTHM_REUSE_BONUS > 0.0 {
+        // Second pass: favour, in each measure that sounds like an earlier one, the
+        // rhythm chosen for that earlier measure (humans often, not always, repeat it).
+        let last = scored.iter().map(|s| s.1).max().unwrap_or(0) / MEASURE;
+        let similar = similar_earlier_measures(&measure_fingerprints(a, last), 0.9);
+        let mut echo: BTreeSet<u32> = BTreeSet::new();
+        for (m, r) in similar.iter().enumerate() {
+            if let Some(r) = r {
+                for p in chosen.range(r * MEASURE..(r + 1) * MEASURE).map(|(p, _)| *p) {
+                    echo.insert(p - r * MEASURE + m as u32 * MEASURE);
+                }
             }
         }
-    }
-    // Fill up to the target with the best remaining positions (all of them without the
-    // learned model).
-    for (_, pos, c, _) in &scored {
-        if chosen.len() >= target {
-            break;
+        for s in scored.iter_mut() {
+            if echo.contains(&s.1) {
+                s.0 += RHYTHM_REUSE_BONUS;
+            }
         }
-        if fits(&chosen, *pos) {
-            chosen.insert(*pos, *c);
-        }
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        chosen = select_rows(&scored, quota.as_ref(), target, finest);
     }
     let mut notes: Vec<Note> = chosen
         .values()
@@ -391,15 +433,14 @@ pub fn place_notes_scaled(
 }
 
 /// For each note, the index of the matching note in an earlier similar measure.
-pub fn find_repeats(a: &SongAnalysis, notes: &[Note], min_similarity: f64) -> Vec<Option<usize>> {
+/// Audio fingerprint of measures `0..=last`: onset strength on the 16 sixteenths of
+/// the measure, for the mix, the kick and the stems when present.
+pub fn measure_fingerprints(a: &SongAnalysis, last: u32) -> Vec<Vec<f32>> {
     let mut layers: Vec<&Layer> = vec![&a.mix, &a.kick];
     if let Some(s) = &a.stems {
         layers.extend([&s.drums, &s.bass, &s.vocals, &s.other]);
     }
-    let measure_of = |pos: u32| pos / (4 * ROWS_PER_BEAT);
-    let last = notes.last().map_or(0, |n| measure_of(n.pos));
-    // Audio fingerprint of each measure: onset strength on 16 sixteenths per layer.
-    let features: Vec<Vec<f32>> = (0..=last)
+    (0..=last)
         .map(|m| {
             let mut v = Vec::new();
             for l in &layers {
@@ -410,17 +451,41 @@ pub fn find_repeats(a: &SongAnalysis, notes: &[Note], min_similarity: f64) -> Ve
             }
             v
         })
-        .collect();
-    let cosine = |x: &[f32], y: &[f32]| {
-        let dot: f64 = x.iter().zip(y).map(|(a, b)| (*a * *b) as f64).sum();
-        let nx: f64 = x.iter().map(|a| (*a * *a) as f64).sum::<f64>().sqrt();
-        let ny: f64 = y.iter().map(|a| (*a * *a) as f64).sum::<f64>().sqrt();
-        if nx == 0.0 || ny == 0.0 {
-            0.0
-        } else {
-            dot / (nx * ny)
-        }
-    };
+        .collect()
+}
+
+pub fn cosine(x: &[f32], y: &[f32]) -> f64 {
+    let dot: f64 = x.iter().zip(y).map(|(a, b)| (*a * *b) as f64).sum();
+    let nx: f64 = x.iter().map(|a| (*a * *a) as f64).sum::<f64>().sqrt();
+    let ny: f64 = y.iter().map(|a| (*a * *a) as f64).sum::<f64>().sqrt();
+    if nx == 0.0 || ny == 0.0 {
+        0.0
+    } else {
+        dot / (nx * ny)
+    }
+}
+
+/// For each measure, the most similar of the 64 previous measures whose fingerprint
+/// has a cosine similarity of at least `min_similarity` (ties: the latest).
+pub fn similar_earlier_measures(fingerprints: &[Vec<f32>], min_similarity: f64) -> Vec<Option<u32>> {
+    (0..fingerprints.len())
+        .map(|m| {
+            let mut best: Option<(f64, u32)> = None;
+            for p in (m.saturating_sub(64)..m).rev() {
+                let sim = cosine(&fingerprints[m], &fingerprints[p]);
+                if sim >= min_similarity && best.is_none_or(|b| sim > b.0) {
+                    best = Some((sim, p as u32));
+                }
+            }
+            best.map(|b| b.1)
+        })
+        .collect()
+}
+
+pub fn find_repeats(a: &SongAnalysis, notes: &[Note], min_similarity: f64) -> Vec<Option<usize>> {
+    let measure_of = |pos: u32| pos / (4 * ROWS_PER_BEAT);
+    let last = notes.last().map_or(0, |n| measure_of(n.pos));
+    let features = measure_fingerprints(a, last);
     // Rhythm signature of each measure: relative positions + jump/hold flags.
     let mut by_measure: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
     for (i, n) in notes.iter().enumerate() {
