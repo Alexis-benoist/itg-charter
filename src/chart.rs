@@ -537,6 +537,7 @@ struct Hyp {
     score: f64,
     /// Reachable parity states with their accumulated cost (pruned).
     frontier: Vec<(State, f32)>,
+    p3: u8,
     p2: u8,
     p1: u8,
     /// Index in the arena of the last choice.
@@ -558,6 +559,7 @@ pub fn select_arrows(
     let mut beam = vec![Hyp {
         score: 0.0,
         frontier: vec![(State::beginning(), 0.0)],
+        p3: 0,
         p2: 0,
         p1: 0,
         node: usize::MAX,
@@ -626,7 +628,7 @@ pub fn select_arrows(
                 } else {
                     0.0
                 };
-                let score = h.score + table.logp(gap, h.p2, h.p1, m) as f64
+                let score = h.score + table.logp(gap, h.p3, h.p2, h.p1, m) as f64
                     - opts.parity_weight * parity_delta
                     + opts.temperature * gumbel
                     + bonus;
@@ -634,6 +636,7 @@ pub fn select_arrows(
                 next.push(Hyp {
                     score,
                     frontier,
+                    p3: h.p2,
                     p2: h.p1,
                     p1: m,
                     node: arena.len() - 1,
@@ -641,9 +644,9 @@ pub fn select_arrows(
             }
         }
         next.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.node.cmp(&b.node)));
-        // Keep diversity: one hypothesis per (last two arrows, best parity state).
+        // Keep diversity: one hypothesis per (last three arrows, best parity state).
         let mut seen = std::collections::HashSet::new();
-        next.retain(|h| seen.insert((h.p2, h.p1, h.frontier[0].0.key())));
+        next.retain(|h| seen.insert((h.p3, h.p2, h.p1, h.frontier[0].0.key())));
         next.truncate(opts.beam_width);
         beam = next;
         let mut row = Row::new(4, beat as f32, second);

@@ -1,7 +1,7 @@
 //! How well does the arrow n-gram predict held-out human charts?
 //!
 //! Scores every dance-single chart of the test split of TEST_DIR (see `music::split_of`)
-//! in bits per arrow, -log2 P(row | two previous rows, gap), under models trained with
+//! in bits per arrow, -log2 P(row | three previous rows, gap), under models trained with
 //! `Model::train` on the train split only of each TRAIN_DIR. The simfiles of that split
 //! are copied to `target/eval/perplexity/` first, so nothing of the test split leaks in.
 //! With `--curve`, the last TRAIN_DIR is also trained on 1/8, 1/4 and 1/2 of its train
@@ -89,15 +89,15 @@ fn train_on(files: &[(PathBuf, Simfile)], step: usize, dir: &Path) -> anyhow::Re
 fn score(model: &Model, charts: &[TestChart]) -> [(f64, usize); 6] {
     let mut acc = [(0.0, 0usize); 6];
     for c in charts {
-        let (mut p2, mut p1, mut last) = (0u8, 0u8, None);
+        let (mut p3, mut p2, mut p1, mut last) = (0u8, 0u8, 0u8, None);
         for &(mask, pos) in &c.sequence {
             let g = last.map_or(GAP_BUCKETS - 1, |l| gap_bucket(pos - l));
-            let bits = -model.prob(c.diff, g, p2, p1, mask).log2();
+            let bits = -model.prob(c.diff, g, p3, p2, p1, mask).log2();
             for k in [c.diff.index(), 5] {
                 acc[k].0 += bits;
                 acc[k].1 += 1;
             }
-            (p2, p1, last) = (p1, mask, Some(pos));
+            (p3, p2, p1, last) = (p2, p1, mask, Some(pos));
         }
     }
     acc

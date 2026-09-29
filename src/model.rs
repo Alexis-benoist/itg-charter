@@ -2,7 +2,7 @@
 //!
 //! `itg-charter train <Songs dir>` reads every dance-single chart it finds and
 //! records, per difficulty:
-//! - an arrow n-gram: P(row | two previous rows, time gap), rows as 4-bit panel masks;
+//! - an arrow n-gram: P(row | three previous rows, time gap), rows as 4-bit panel masks;
 //! - densities (rows per second), jump / hold ratios, hold lengths, rhythmic snaps;
 //! - tech rates computed with the ITGmania parity port (crossovers, footswitches...);
 //! - a linear fit of the meter against the density of the busiest measures.
@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const MODEL_VERSION: u32 = 4;
+pub const MODEL_VERSION: u32 = 5;
 pub const GAP_BUCKETS: usize = 6;
 pub const MASKS: usize = 16;
 pub const SNAP_CLASSES: usize = 6;
@@ -125,6 +125,10 @@ pub struct Model {
     pub stats: Vec<DiffStats>,
     /// Counts indexed by [difficulty][gap bucket][row-2][row-1][row], rows as masks (0 = start).
     pub ngram: Vec<u32>,
+    /// Sparse counts with one more row of context, (index, count) sorted by index, index
+    /// [difficulty][gap bucket][row-3][row-2][row-1][row]: the order-4 model, which backs
+    /// off to `ngram` (`eval_context`: −0.10 bit per row on classic charts).
+    pub ngram4: Vec<(u32, u32)>,
     /// meter ≈ intercept + slope × (75th percentile of per-measure rows per second).
     pub meter_intercept: f64,
     pub meter_slope: f64,
@@ -199,6 +203,16 @@ fn meter_density_table(points: &[(f64, f64)]) -> Vec<f64> {
 fn ngram_index(d: usize, g: usize, p2: usize, p1: usize, cur: usize) -> usize {
     (((d * GAP_BUCKETS + g) * MASKS + p2) * MASKS + p1) * MASKS + cur
 }
+
+/// Contexts × arrows of the order-4 model for one difficulty.
+const NGRAM4_PER_DIFF: usize = GAP_BUCKETS * MASKS * MASKS * MASKS * MASKS;
+
+fn ngram4_index(d: usize, g: usize, p3: usize, p2: usize, p1: usize, cur: usize) -> usize {
+    d * NGRAM4_PER_DIFF + (((g * MASKS + p3) * MASKS + p2) * MASKS + p1) * MASKS + cur
+}
+
+/// Dirichlet back-off strength of the n-gram (each order backs off to the shorter one).
+const NGRAM_ALPHA: f64 = 4.0;
 
 /// Numbers describing one chart, shared by training and evaluation of generated charts.
 #[derive(Clone, Debug, Default)]
@@ -356,6 +370,7 @@ impl Model {
         anyhow::ensure!(!files.is_empty(), "no simfile found in {}", songs_dir.display());
         let layout = Layout::dance_single();
         let mut ngram = vec![0u32; NDIFF * GAP_BUCKETS * MASKS * MASKS * MASKS];
+        let mut ngram4: std::collections::BTreeMap<u32, u32> = Default::default();
         let mut per_diff: Vec<Vec<ChartFeatures>> = vec![Vec::new(); NDIFF];
         let mut meters: Vec<Vec<f64>> = vec![Vec::new(); NDIFF];
         let mut fit_points = Vec::new();
@@ -391,12 +406,15 @@ impl Model {
                 }
                 let d = diff.index();
                 for mirrored in [false, true] {
-                    let (mut p2, mut p1, mut last) = (0usize, 0usize, None);
+                    let (mut p3, mut p2, mut p1, mut last) = (0usize, 0usize, 0usize, None);
                     for &(mask, pos) in &f.sequence {
                         let mask = if mirrored { mirror(mask) } else { mask } as usize;
                         let g = last.map_or(GAP_BUCKETS - 1, |l| gap_bucket(pos - l));
                         ngram[ngram_index(d, g, p2, p1, mask)] += 1;
-                        (p2, p1, last) = (p1, mask, Some(pos));
+                        *ngram4
+                            .entry(ngram4_index(d, g, p3, p2, p1, mask) as u32)
+                            .or_default() += 1;
+                        (p3, p2, p1, last) = (p2, p1, mask, Some(pos));
                     }
                 }
                 if chart.meter > 0 {
@@ -417,6 +435,7 @@ impl Model {
             version: MODEL_VERSION,
             stats,
             ngram,
+            ngram4: ngram4.into_iter().collect(),
             meter_intercept,
             meter_slope,
             bpm_counts: bpm_histogram(&main_bpms),
@@ -444,11 +463,20 @@ impl Model {
         &self.stats[d.index()]
     }
 
-    /// Smoothed probability of `cur` given the two previous rows and the gap bucket.
-    /// Backs off from trigram to bigram to unigram (Dirichlet smoothing).
-    pub fn prob(&self, d: Difficulty, gap: usize, p2: u8, p1: u8, cur: u8) -> f64 {
-        self.marginals(d, gap)
-            .prob(p2 as usize, p1 as usize, cur as usize)
+    /// Smoothed probability of `cur` given the three previous rows and the gap bucket.
+    /// Backs off from order 4 to trigram, bigram, unigram (Dirichlet smoothing).
+    pub fn prob(&self, d: Difficulty, gap: usize, p3: u8, p2: u8, p1: u8, cur: u8) -> f64 {
+        let p = self
+            .marginals(d, gap)
+            .prob(p2 as usize, p1 as usize, cur as usize);
+        let at = |c: usize| {
+            let i = ngram4_index(d.index(), gap, p3 as usize, p2 as usize, p1 as usize, c) as u32;
+            self.ngram4
+                .binary_search_by_key(&i, |e| e.0)
+                .map_or(0.0, |k| self.ngram4[k].1 as f64)
+        };
+        let total: f64 = (1..MASKS).map(at).sum();
+        (at(cur as usize) + NGRAM_ALPHA * p) / (total + NGRAM_ALPHA)
     }
 
     fn marginals(&self, d: Difficulty, gap: usize) -> Marginals<'_> {
@@ -479,14 +507,29 @@ impl Model {
 
     /// Precomputes log-probabilities for fast lookups during generation.
     pub fn table(&self, d: Difficulty) -> ProbTable {
-        let mut logp = vec![0f32; GAP_BUCKETS * MASKS * MASKS * MASKS];
+        // Dense order-4 counts of this difficulty.
+        let base = (d.index() * NGRAM4_PER_DIFF) as u32;
+        let start = self.ngram4.partition_point(|e| e.0 < base);
+        let mut counts = vec![0u32; NGRAM4_PER_DIFF];
+        for &(i, n) in self.ngram4[start..]
+            .iter()
+            .take_while(|e| e.0 < base + NGRAM4_PER_DIFF as u32)
+        {
+            counts[(i - base) as usize] = n;
+        }
+        let mut logp = vec![0f32; NGRAM4_PER_DIFF];
         for g in 0..GAP_BUCKETS {
             let m = self.marginals(d, g);
-            for p2 in 0..MASKS {
-                for p1 in 0..MASKS {
-                    for cur in 1..MASKS {
-                        let i = ((g * MASKS + p2) * MASKS + p1) * MASKS + cur;
-                        logp[i] = m.prob(p2, p1, cur).ln() as f32;
+            for p3 in 0..MASKS {
+                for p2 in 0..MASKS {
+                    for p1 in 0..MASKS {
+                        let ctx = (((g * MASKS + p3) * MASKS + p2) * MASKS + p1) * MASKS;
+                        let total: f64 = (1..MASKS).map(|c| counts[ctx + c] as f64).sum();
+                        for cur in 1..MASKS {
+                            let p = m.prob(p2, p1, cur);
+                            let p = (counts[ctx + cur] as f64 + NGRAM_ALPHA * p) / (total + NGRAM_ALPHA);
+                            logp[ctx + cur] = p.ln() as f32;
+                        }
                     }
                 }
             }
@@ -530,7 +573,7 @@ struct Marginals<'a> {
 
 impl Marginals<'_> {
     fn prob(&self, p2: usize, p1: usize, cur: usize) -> f64 {
-        const ALPHA: f64 = 4.0;
+        const ALPHA: f64 = NGRAM_ALPHA;
         let pu = (self.uni[cur] + ALPHA / 15.0) / (self.uni_t + ALPHA);
         let pb = (self.bi[p1][cur] + ALPHA * pu) / (self.bi_t[p1] + ALPHA);
         let c = self.counts[(p2 * MASKS + p1) * MASKS + cur] as f64;
@@ -544,8 +587,9 @@ pub struct ProbTable {
 }
 
 impl ProbTable {
-    pub fn logp(&self, gap: usize, p2: u8, p1: u8, cur: u8) -> f32 {
-        self.logp[((gap * MASKS + p2 as usize) * MASKS + p1 as usize) * MASKS + cur as usize]
+    pub fn logp(&self, gap: usize, p3: u8, p2: u8, p1: u8, cur: u8) -> f32 {
+        self.logp[(((gap * MASKS + p3 as usize) * MASKS + p2 as usize) * MASKS + p1 as usize) * MASKS
+            + cur as usize]
     }
 }
 
@@ -679,7 +723,7 @@ mod tests {
         assert!((115..140).contains(&peak), "prior peaks at {peak}");
         assert!(m.bpm_prior(75.0) < m.bpm_prior(150.0));
         assert!(m.bpm_prior(300.0) < m.bpm_prior(150.0));
-        let s: f64 = (1..16u8).map(|c| m.prob(Difficulty::Medium, 3, 1, 8, c)).sum();
+        let s: f64 = (1..16u8).map(|c| m.prob(Difficulty::Medium, 3, 2, 1, 8, c)).sum();
         assert!((s - 1.0).abs() < 1e-6, "probabilities sum to {s}");
     }
 }

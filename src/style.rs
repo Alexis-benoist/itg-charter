@@ -87,7 +87,7 @@ mod tests {
         };
         for m in &models {
             assert!(m.stats(Difficulty::Hard).charts > 0);
-            let s: f64 = (1..16u8).map(|c| m.prob(Difficulty::Hard, 3, 1, 8, c)).sum();
+            let s: f64 = (1..16u8).map(|c| m.prob(Difficulty::Hard, 3, 2, 1, 8, c)).sum();
             assert!((s - 1.0).abs() < 1e-6);
         }
         assert_eq!(

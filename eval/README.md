@@ -37,3 +37,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `charts-classic-*.txt`, `placement-test-classic-*.txt` | ancien modèle, corpus complet, style classique (flèches + placement), et combinaison retenue (`combo` : flèches classique, placement corpus complet) sur `~/itg-train-classic` |
 | `context-{classic,stream,tech}.txt` | information des lignes précédentes : bits par ligne des modèles de flèches d'ordre 1 à 5 (0 à 4 lignes précédentes) par style, courbe d'apprentissage |
 | `patterns-{classic,stream,tech}.txt` | patterns au-delà de 2 lignes (escaliers, drills, candles, runs de 16es, diversité, répétition) : nos charts vs les humains du style |
+| `patterns-*-order4.txt`, `charts-style-*-order4.txt`, `perplexity-test-classic-order4.txt` | modèle de flèches d'ordre 4 (3 lignes précédentes, format 5) : perplexité, stats, patterns |
