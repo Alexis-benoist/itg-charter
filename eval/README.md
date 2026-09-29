@@ -27,3 +27,5 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `placement-test-1b-share{0.5,0.75}.txt` | quotas partiels : retombent sur la répartition de 1a (pas d'entre-deux) |
 | `placement-test-rhythm-baseline.txt`, `placement-test-2-reuse{0.0,0.1,0.3,1.0}.txt` | reprise du rythme des mesures similaires : mesure + bonus β |
 | `placement-test-2-reuse-challenge-only.txt` | bonus de reprise du rythme en Challenge seulement (retenu) |
+| `placement-test-A1-baseline.txt` | référence `HEAD` relancée sur la bibliothèque actuelle (le nombre de morceaux a changé depuis les résumés précédents) |
+| `placement-test-A1-section.txt` | A1 : + 6 indices de section (volume mesure / phrase, bande kick, onsets par mesure, changement de section, position) — log-loss test meilleure partout, mais corrélation par mesure 0,316 → 0,293 (régression) |

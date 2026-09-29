@@ -1,0 +1,8 @@
+split test, songs 300, seed 1, human grid forced
+           |      natural (P / R / F)      |    equal count (P / R / F)    | chance F (equal count) | measure corr nat/eq | rhythm reuse human / ours (natural)
+Beginner   |  48.6%  48.4%  48.5% ( 227) |  64.4%  64.4%  64.4% ( 227) |                  25.8% |   -0.004 / 0.014 |  70.9% / 53.4% (13348 pairs)
+Easy       |  65.1%  63.1%  64.1% ( 237) |  67.2%  67.2%  67.2% ( 237) |                  34.7% |    0.168 / 0.166 |  49.3% / 51.9% (15235 pairs)
+Medium     |  67.5%  64.1%  65.7% ( 249) |  69.9%  69.8%  69.9% ( 249) |                  44.9% |    0.331 / 0.318 |  41.4% / 32.0% (16951 pairs)
+Hard       |  71.5%  66.0%  68.6% ( 262) |  70.0%  69.7%  69.9% ( 262) |                  53.3% |    0.393 / 0.387 |  39.7% / 27.9% (18377 pairs)
+Challenge  |  75.7%  68.9%  72.1% ( 263) |  74.1%  73.3%  73.7% ( 263) |                  66.7% |    0.519 / 0.502 |  44.1% / 31.2% (19500 pairs)
+All        | F natural 67.8% | F equal count 70.7% | F chance 53.1% | measure corr 0.293 / 0.288 | rhythm reuse human 47.8% ours 38.0%

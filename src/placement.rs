@@ -14,9 +14,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub const PLACEMENT_VERSION: u32 = 1;
+pub const PLACEMENT_VERSION: u32 = 2;
 /// snap (4) + beat in bar (4) + mix + 4 bands + loudness + local density + salience + onset
-pub const FEATURES: usize = 17;
+/// + section context (measure / phrase loudness, kick band, onset count, change, position)
+pub const FEATURES: usize = 23;
 pub const FEATURE_NAMES: [&str; FEATURES] = [
     "snap 4th",
     "snap 8th",
@@ -35,6 +36,12 @@ pub const FEATURE_NAMES: [&str; FEATURES] = [
     "local density",
     "salience",
     "onset here",
+    "measure loudness",
+    "phrase loudness",
+    "measure kick",
+    "measure onsets",
+    "section change",
+    "song position",
 ];
 
 /// Model shipped with the binary.
@@ -64,6 +71,82 @@ pub struct PlacementFeatures<'a> {
     rms_fps: f64,
     rms_ref: f32,
     onsets: BTreeSet<u32>,
+    /// Section context per measure (see [`section_context`]).
+    measures: Vec<[f32; 5]>,
+    duration: f64,
+}
+
+/// Measure-level context, from the mix only (so that it is the same with and without
+/// stems): loudness of the measure and of its 8-measure phrase, kick-band energy and
+/// onset count, each relative to the song's median measure (capped at 3), and how much
+/// the 4 measures from here differ from the 4 before (1 - cosine of their onset
+/// fingerprints), which is high at section boundaries.
+fn section_context(a: &SongAnalysis) -> Vec<[f32; 5]> {
+    let grid = &a.grid;
+    let n = (grid.beat(a.duration) / 4.0).ceil().max(1.0) as usize;
+    let span = |m: usize| (grid.time(4.0 * m as f64), grid.time(4.0 * (m + 1) as f64));
+    let fps = a.mix.envelope.fps;
+    let mean = |v: &[f32], m: usize| -> f32 {
+        let (t0, t1) = span(m);
+        let (i0, i1) = ((t0 * fps).max(0.0) as usize, (t1 * fps).max(0.0) as usize);
+        let s = v.get(i0.min(v.len())..i1.min(v.len())).unwrap_or(&[]);
+        if s.is_empty() {
+            0.0
+        } else {
+            s.iter().sum::<f32>() / s.len() as f32
+        }
+    };
+    let relative = |v: Vec<f32>| -> Vec<f32> {
+        let r = percentile(&v, 0.5);
+        v.into_iter().map(|x| (x / r).min(3.0)).collect()
+    };
+    let loud = relative((0..n).map(|m| mean(&a.mix.rms, m)).collect());
+    let empty = Vec::new();
+    let kick = relative(
+        (0..n)
+            .map(|m| mean(a.bands.first().map_or(&empty, |e| &e.values), m))
+            .collect(),
+    );
+    let mut counts = vec![0f32; n];
+    for &(t, _) in &a.mix.onsets {
+        let m = (grid.beat(t) / 4.0).floor();
+        if m >= 0.0 && (m as usize) < n {
+            counts[m as usize] += 1.0;
+        }
+    }
+    let counts = relative(counts);
+    let fingerprint: Vec<Vec<f32>> = (0..n)
+        .map(|m| {
+            let mut v = Vec::with_capacity(16 * (1 + a.bands.len()));
+            for env in std::iter::once(&a.mix.envelope).chain(&a.bands) {
+                for k in 0..16 {
+                    v.push(env.max_around(grid.time(4.0 * m as f64 + k as f64 / 4.0), 0.03));
+                }
+            }
+            v
+        })
+        .collect();
+    let sum = |r: std::ops::Range<usize>| -> Vec<f32> {
+        let mut out = vec![0f32; fingerprint[0].len()];
+        for f in &fingerprint[r] {
+            for (o, x) in out.iter_mut().zip(f) {
+                *o += x;
+            }
+        }
+        out
+    };
+    (0..n)
+        .map(|m| {
+            let phrase = m.saturating_sub(3)..(m + 5).min(n);
+            let phrase_loud = loud[phrase.clone()].iter().sum::<f32>() / phrase.len() as f32;
+            let change = if m == 0 {
+                1.0
+            } else {
+                1.0 - crate::chart::cosine(&sum(m.saturating_sub(4)..m), &sum(m..(m + 4).min(n))) as f32
+            };
+            [loud[m], phrase_loud, kick[m], counts[m], change]
+        })
+        .collect()
 }
 
 impl<'a> PlacementFeatures<'a> {
@@ -83,6 +166,8 @@ impl<'a> PlacementFeatures<'a> {
             rms_fps: a.mix.envelope.fps,
             rms_ref: percentile(&a.mix.rms, 0.95),
             onsets,
+            measures: section_context(a),
+            duration: a.duration.max(1.0),
         }
     }
 
@@ -119,6 +204,9 @@ impl<'a> PlacementFeatures<'a> {
         let neighbours = (around[3] + around[4]) / 2.0;
         f[15] = mix - neighbours;
         f[16] = self.onsets.contains(&pos) as u8 as f32;
+        let m = ((pos / 192) as usize).min(self.measures.len() - 1);
+        f[17..22].copy_from_slice(&self.measures[m]);
+        f[22] = (t / self.duration).clamp(0.0, 1.0) as f32;
         f
     }
 }
@@ -266,6 +354,14 @@ mod tests {
             .count();
         assert!(acc >= 390, "accuracy {acc}/400, weights {w:?}");
         assert!(w[9] > 0.0);
+    }
+
+    #[test]
+    fn embedded_model_is_current() {
+        // Otherwise the generator silently falls back to onset-strength placement.
+        let m = PlacementModel::embedded().expect("model/placement.json matches PLACEMENT_VERSION");
+        assert_eq!(m.weights.len(), 5);
+        assert!(m.weights.iter().all(|w| w.len() == FEATURES + 1));
     }
 
     #[test]
