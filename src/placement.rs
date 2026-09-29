@@ -14,10 +14,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub const PLACEMENT_VERSION: u32 = 2;
+pub const PLACEMENT_VERSION: u32 = 3;
 /// snap (4) + beat in bar (4) + mix + 4 bands + loudness + local density + salience + onset
-/// + section context (measure / phrase loudness, kick band, onset count, change, position)
-pub const FEATURES: usize = 23;
+/// + section context (measure / phrase loudness, kick band, onset count)
+pub const FEATURES: usize = 21;
 pub const FEATURE_NAMES: [&str; FEATURES] = [
     "snap 4th",
     "snap 8th",
@@ -40,8 +40,6 @@ pub const FEATURE_NAMES: [&str; FEATURES] = [
     "phrase loudness",
     "measure kick",
     "measure onsets",
-    "section change",
-    "song position",
 ];
 
 /// Model shipped with the binary.
@@ -72,16 +70,13 @@ pub struct PlacementFeatures<'a> {
     rms_ref: f32,
     onsets: BTreeSet<u32>,
     /// Section context per measure (see [`section_context`]).
-    measures: Vec<[f32; 5]>,
-    duration: f64,
+    measures: Vec<[f32; 4]>,
 }
 
 /// Measure-level context, from the mix only (so that it is the same with and without
 /// stems): loudness of the measure and of its 8-measure phrase, kick-band energy and
-/// onset count, each relative to the song's median measure (capped at 3), and how much
-/// the 4 measures from here differ from the 4 before (1 - cosine of their onset
-/// fingerprints), which is high at section boundaries.
-fn section_context(a: &SongAnalysis) -> Vec<[f32; 5]> {
+/// onset count, each relative to the song's median measure (capped at 3).
+fn section_context(a: &SongAnalysis) -> Vec<[f32; 4]> {
     let grid = &a.grid;
     let n = (grid.beat(a.duration) / 4.0).ceil().max(1.0) as usize;
     let span = |m: usize| (grid.time(4.0 * m as f64), grid.time(4.0 * (m + 1) as f64));
@@ -115,36 +110,11 @@ fn section_context(a: &SongAnalysis) -> Vec<[f32; 5]> {
         }
     }
     let counts = relative(counts);
-    let fingerprint: Vec<Vec<f32>> = (0..n)
-        .map(|m| {
-            let mut v = Vec::with_capacity(16 * (1 + a.bands.len()));
-            for env in std::iter::once(&a.mix.envelope).chain(&a.bands) {
-                for k in 0..16 {
-                    v.push(env.max_around(grid.time(4.0 * m as f64 + k as f64 / 4.0), 0.03));
-                }
-            }
-            v
-        })
-        .collect();
-    let sum = |r: std::ops::Range<usize>| -> Vec<f32> {
-        let mut out = vec![0f32; fingerprint[0].len()];
-        for f in &fingerprint[r] {
-            for (o, x) in out.iter_mut().zip(f) {
-                *o += x;
-            }
-        }
-        out
-    };
     (0..n)
         .map(|m| {
             let phrase = m.saturating_sub(3)..(m + 5).min(n);
             let phrase_loud = loud[phrase.clone()].iter().sum::<f32>() / phrase.len() as f32;
-            let change = if m == 0 {
-                1.0
-            } else {
-                1.0 - crate::chart::cosine(&sum(m.saturating_sub(4)..m), &sum(m..(m + 4).min(n))) as f32
-            };
-            [loud[m], phrase_loud, kick[m], counts[m], change]
+            [loud[m], phrase_loud, kick[m], counts[m]]
         })
         .collect()
 }
@@ -167,7 +137,6 @@ impl<'a> PlacementFeatures<'a> {
             rms_ref: percentile(&a.mix.rms, 0.95),
             onsets,
             measures: section_context(a),
-            duration: a.duration.max(1.0),
         }
     }
 
@@ -205,8 +174,7 @@ impl<'a> PlacementFeatures<'a> {
         f[15] = mix - neighbours;
         f[16] = self.onsets.contains(&pos) as u8 as f32;
         let m = ((pos / 192) as usize).min(self.measures.len() - 1);
-        f[17..22].copy_from_slice(&self.measures[m]);
-        f[22] = (t / self.duration).clamp(0.0, 1.0) as f32;
+        f[17..21].copy_from_slice(&self.measures[m]);
         f
     }
 }
