@@ -1,0 +1,5 @@
+test split of /opt/itgmania/Songs: 2085 charts, 777737 rows; uniform over the 15 masks = 3.907 bits
+bits per row | Beginner | Easy | Medium | Hard | Challenge | all      | trained on
+             |     1.815 |     1.805 |     1.755 |     1.704 |     1.698 |    1.729 | /opt/itgmania/Songs train 1/1 (446 simfiles, 1856 charts)
+             |     1.897 |     1.835 |     1.787 |     1.742 |     1.735 |    1.766 | /home/alexis/itg-train train 1/1 (2281 simfiles, 9733 charts)
+             |     1.858 |     1.817 |     1.798 |     1.740 |     1.729 |    1.762 | embedded model (all songs, test split included)

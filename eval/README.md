@@ -27,3 +27,7 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `placement-test-1b-share{0.5,0.75}.txt` | quotas partiels : retombent sur la répartition de 1a (pas d'entre-deux) |
 | `placement-test-rhythm-baseline.txt`, `placement-test-2-reuse{0.0,0.1,0.3,1.0}.txt` | reprise du rythme des mesures similaires : mesure + bonus β |
 | `placement-test-2-reuse-challenge-only.txt` | bonus de reprise du rythme en Challenge seulement (retenu) |
+| `charts-corpus{3,4}-{old,new}-model.txt`, `placement-test-corpus{3,4}-{old,new}-model.txt` | ancien vs nouveau modèle sur le corpus élargi `~/itg-train` (13 635 puis 19 321 charts, voir `training/PLAN.md`) |
+| `human-agreement.txt` | plafond : deux charters humains sur la même chanson et la même difficulté (F après alignement, ±25 ms) |
+| `perplexity-test.txt` | bits par ligne des charts humains du split test d'`~/itg-train` selon le n-gramme de flèches, modèles entraînés sur le split train seul (Songs du jeu ; courbe d'apprentissage 1/8 → 1/1 d'`~/itg-train`) |
+| `perplexity-test-game-songs.txt` | idem sur le split test des Songs du jeu : le modèle des Songs du jeu y bat celui du corpus élargi |
