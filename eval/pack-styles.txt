@@ -1,0 +1,154 @@
+/home/alexis/itg-train: 19438 charts, 131 packs with at least 20 charts, 5 groups; profile = mean z-score vs charts of the same meter
+
+== group 1 (2 packs, 76 charts)
+profile: triplets +1.95, nps +1.36, rolls +1.15, holds +1.08, mines +1.03, xo +0.87, jumps -0.76, fs +0.46, bpm -0.31, jacks -0.21, gimmicks -0.21, stream16 +0.19, brackets -0.17
+meter 8-10 medians (35 charts): nps 3.742, stream16 0.127, triplets 0.000, jumps 0.011, holds 0.092, rolls 0.000, mines 4.906, xo 4.099, fs 0.727, jacks 0.000, brackets 0.000, gimmicks 0.000, bpm 145.000
+  Kyzentun's Krap                                           54 charts  triplets +1.5, xo +0.9, mines +0.8, nps +0.7
+  Kyzentuns Handjobs                                        22 charts  triplets +2.4, nps +2.0, rolls +1.7, holds +1.7
+
+== group 2 (48 packs, 9246 charts)
+profile: nps -0.30, jumps +0.22, gimmicks -0.14, xo +0.08, bpm -0.07, brackets +0.07, rolls -0.07, jacks -0.05, holds -0.04, triplets +0.04, stream16 -0.04, mines +0.00, fs +0.00
+meter 8-10 medians (2556 charts): nps 4.094, stream16 0.162, triplets 0.000, jumps 0.057, holds 0.036, rolls 0.000, mines 0.000, xo 1.111, fs 0.000, jacks 0.000, brackets 0.258, gimmicks 0.000, bpm 139.999
+  4PANEL_JBEAN_Originals_2020-001                          500 charts  nps -0.7, bpm -0.4, xo -0.3, brackets -0.3
+  Albumix2-I                                                68 charts  nps -0.4, jumps +0.2, stream16 -0.2, xo -0.2
+  Albumix2-II (R21)                                         68 charts  nps -0.7, jumps +0.6, bpm -0.2, gimmicks -0.2
+  Albumix2-III (UMKCDDR)                                    72 charts  jumps +0.5, mines +0.3, stream16 -0.2, triplets -0.2
+  Albumix2-V                                                88 charts  nps -0.7, jumps +0.5, bpm -0.2, gimmicks +0.2
+  Anime Boston 2010                                        260 charts  nps +0.5, jumps +0.4, jacks +0.2, gimmicks -0.2
+  Animusic Season 2                                        205 charts  holds -0.2, gimmicks -0.2, jumps +0.2, xo -0.1
+  BEST-mix #5 - ITG B1-3                                    27 charts  brackets +0.5, holds +0.5, nps -0.5, stream16 -0.3
+  Banzaitvs ITG1 Home                                      155 charts  brackets +0.5, xo +0.4, jumps +0.2, rolls -0.2
+  Banzaitvs ITG2 Home                                      205 charts  brackets +0.6, xo +0.4, nps -0.3, gimmicks -0.2
+  Banzaitvs ITG3 Home                                      220 charts  xo +0.5, brackets +0.5, bpm +0.5, fs +0.2
+  DDR vs PIU - Pump It Up 3rd                               86 charts  nps -2.2, xo +1.6, holds -0.9, stream16 -0.6
+  Dancefreak's Originals                                   455 charts  xo +0.6, holds -0.4, nps +0.3, jumps +0.3
+  Feraligatr Scales                                         25 charts  bpm -0.5, jumps +0.4, stream16 +0.4, xo -0.4
+  Hopscotch Mix 2                                          202 charts  xo +0.9, jumps +0.5, nps -0.4, brackets +0.4
+  Hopscotch Mix 3 Excel                                    265 charts  xo +0.4, nps -0.4, bpm +0.3, stream16 -0.2
+  Hopscotch Mix Encore                                     141 charts  bpm +1.7, mines +0.4, nps -0.3, stream16 -0.3
+  Ike Pie 1st Serving                                       38 charts  nps +0.6, jumps +0.4, gimmicks -0.2, holds -0.2
+  In The Groove 3                                          456 charts  xo +0.6, jumps +0.2, gimmicks -0.2, stream16 -0.1
+  In The Groove Rebirth                                    420 charts  jumps +0.3, nps +0.2, brackets +0.1, mines +0.1
+  In The Groove Rebirth 2                                  386 charts  nps +0.3, jumps +0.3, fs +0.2, stream16 +0.2
+  JBEAN Originals - 2018                                   650 charts  nps -0.5, bpm -0.4, xo -0.4, holds -0.2
+  JBEAN Originals - 2019                                   545 charts  nps -0.8, bpm -0.4, xo -0.3, brackets -0.3
+  JBEAN Originals - 2021                                   375 charts  nps -0.7, bpm -0.4, xo -0.4, brackets -0.3
+  JBEAN Originals - 2022                                   499 charts  nps -0.6, bpm -0.4, xo -0.4, brackets -0.2
+  JBEAN Originals - 2023                                   250 charts  nps -0.5, xo -0.4, bpm -0.4, holds -0.3
+  JHF-Mix 3                                                 29 charts  jumps +1.2, nps -0.6, bpm -0.6, gimmicks -0.2
+  Jbean3535 Exclusives - Fall 2011                         240 charts  xo -0.4, nps -0.4, bpm -0.3, holds -0.3
+  Jbean3535 Exclusives - Fall 2012                         295 charts  bpm -0.4, nps -0.3, jumps +0.3, xo -0.3
+  My Little Pony Season 01 Pack r2                          58 charts  stream16 +0.4, holds +0.4, rolls +0.4, mines +0.4
+  NEMORIGINAL Collection Vol 1                              60 charts  mines +0.7, xo +0.6, nps +0.3, triplets +0.3
+  NIQ9's Simfiles 1                                        105 charts  holds +0.9, xo +0.5, stream16 +0.5, mines +0.3
+  PandemiXium 4-1 -STARFIRE-                               237 charts  jumps +0.3, mines -0.2, rolls -0.2, nps -0.1
+  Plaguemix Series                                          51 charts  xo +0.9, jumps +0.4, holds -0.3, nps -0.2
+  Project_Destruction                                      110 charts  jumps +0.6, holds +0.4, jacks +0.4, brackets +0.2
+  Rynker's Hard Techno 1                                   182 charts  holds -0.6, nps -0.4, xo -0.4, triplets +0.3
+  Rynker's Hard Techno 2                                   181 charts  xo -0.3, holds -0.2, brackets +0.2, fs +0.2
+  Rynker's Hardstyle Pack                                   76 charts  brackets +1.2, triplets +1.2, holds -0.5, jumps +0.5
+  Sexuality Violation                                       20 charts  nps -1.3, jacks -0.5, xo -0.4, jumps +0.4
+  Sexuality Violation 2                                    219 charts  triplets +0.6, nps -0.5, xo -0.4, stream16 -0.4
+  Sexuality Violation 3                                    252 charts  xo -0.5, nps -0.4, jumps -0.4, triplets +0.3
+  St․ Patrick's Day Pack                                    55 charts  bpm -0.5, stream16 +0.5, nps -0.3, xo +0.2
+  Tachyon Spectrum                                          80 charts  holds +0.4, rolls +0.4, nps -0.4, xo -0.4
+  The SNES Collab                                           44 charts  jumps +0.7, xo +0.5, bpm +0.4, nps -0.3
+  Touhou Dancing Delusion 2                                 62 charts  fs +1.0, xo +0.5, jacks +0.5, rolls +0.3
+  Valentine's Day                                           52 charts  triplets +1.1, holds +0.5, nps -0.3, mines -0.2
+  Washed Up                                                110 charts  jumps -0.2, mines +0.2, nps -0.2, rolls +0.2
+  r21freak Secret Stepfile Santa 1                          67 charts  xo +0.8, brackets +0.8, jumps +0.7, nps -0.4
+
+== group 3 (9 packs, 590 charts)
+profile: holds +1.04, mines +0.80, jumps +0.77, xo +0.69, brackets +0.66, gimmicks +0.65, rolls +0.64, fs +0.54, jacks +0.38, bpm +0.12, triplets -0.04, stream16 -0.04, nps -0.01
+meter 8-10 medians (180 charts): nps 4.250, stream16 0.156, triplets 0.000, jumps 0.083, holds 0.134, rolls 0.185, mines 9.032, xo 2.957, fs 0.631, jacks 0.000, brackets 0.930, gimmicks 5.000, bpm 147.000
+  CMGs Firsts                                               38 charts  holds +1.6, jumps +1.4, xo +1.3, brackets +1.0
+  CMGs Second Coming                                        61 charts  jumps +1.7, holds +1.6, xo +1.4, brackets +1.3
+  CMGs The 3rd Chapter                                      78 charts  xo +1.8, jumps +1.4, brackets +1.3, fs +1.2
+  Gazebo de Brute                                           95 charts  gimmicks +1.7, rolls +1.2, mines +1.0, holds +0.9
+  JHF-Mix 1                                                 88 charts  rolls +1.5, holds +1.0, jumps +0.9, xo +0.3
+  Monster Energy Pack 3                                     61 charts  holds +1.9, mines +1.8, rolls +1.7, brackets +1.0
+  Zimlord's Pre-staff Originals                             49 charts  gimmicks +1.4, mines +0.8, jumps +0.5, brackets +0.4
+  r2112                                                     60 charts  gimmicks +1.5, mines +1.3, rolls +1.2, xo +0.9
+  r21twins                                                  60 charts  gimmicks +1.7, mines +0.8, xo +0.8, bpm +0.5
+
+== group 4 (60 packs, 7868 charts)
+profile: nps +0.33, xo -0.31, jumps -0.27, holds +0.17, bpm +0.16, gimmicks +0.11, rolls +0.08, brackets -0.07, fs -0.05, jacks +0.03, mines +0.03, triplets -0.02, stream16 +0.00
+meter 8-10 medians (1906 charts): nps 4.388, stream16 0.138, triplets 0.000, jumps 0.047, holds 0.075, rolls 0.000, mines 0.342, xo 0.345, fs 0.166, jacks 0.000, brackets 0.283, gimmicks 1.000, bpm 155.000
+  Acid Intravenous [SM5]                                    40 charts  bpm +0.6, xo -0.5, nps +0.4, triplets -0.3
+  Anime Extravaganza 1                                      97 charts  holds +0.9, xo -0.5, stream16 -0.3, gimmicks -0.2
+  Anime Extravaganza 2                                     101 charts  holds +0.8, xo -0.3, triplets +0.3, stream16 -0.3
+  Anime Extravaganza 3                                     100 charts  holds +1.2, mines +0.7, xo -0.5, jacks +0.3
+  Animusic Season 1                                        205 charts  nps +0.3, gimmicks -0.2, xo -0.2, stream16 -0.2
+  BEST-mix #5 - ITG B2-1                                    25 charts  gimmicks +0.6, bpm +0.5, fs +0.5, jumps +0.4
+  BemaniBeats 6                                            126 charts  rolls +0.7, mines +0.6, holds +0.4, nps +0.3
+  Brother Mojo                                             144 charts  stream16 +0.5, bpm -0.5, nps +0.3, brackets -0.2
+  Chen's Helplessly Enjoyable Notable Simfiles              50 charts  bpm +0.3, holds +0.2, jumps -0.2, gimmicks -0.2
+  Condor's Overly Cool & Kawaii Simfiles 01                 75 charts  jumps -0.8, gimmicks +0.6, xo -0.6, nps +0.4
+  Condor's Overly Cool & Kawaii Simfiles 02                 75 charts  jumps -0.7, rolls +0.5, xo -0.5, nps +0.5
+  Condor's Overly Cool & Kawaii Simfiles 03                 65 charts  gimmicks +1.4, jumps -0.7, xo -0.5, nps +0.5
+  Condor's Overly Cool & Kawaii Simfiles 04                 65 charts  jumps -0.5, rolls +0.5, nps +0.4, xo -0.4
+  DBK4                                                      51 charts  holds +1.1, jumps -0.4, brackets -0.3, mines +0.2
+  FlightMix 1st Mix                                        108 charts  bpm +0.4, stream16 -0.3, nps +0.3, gimmicks -0.2
+  FlightMix 1st Mix Advance                                111 charts  bpm +0.4, nps +0.3, stream16 -0.3, gimmicks -0.2
+  FlightMix 2nd Mix                                        202 charts  bpm +0.5, nps +0.4, xo -0.3, jumps -0.3
+  FlightMix 3rd Mix                                        245 charts  holds +0.5, xo -0.4, bpm +0.2, mines +0.2
+  FlightMix 4th Mix                                        280 charts  nps +0.4, jumps -0.3, holds +0.3, bpm +0.2
+  ForeveR21                                                 50 charts  nps +0.5, xo -0.4, jacks +0.3, triplets +0.2
+  Fyshi's Arrow Rhythm Terminal                             46 charts  holds +0.6, xo -0.3, rolls +0.2, stream16 +0.2
+  Game Grumps Revolution                                    45 charts  holds +1.2, xo -0.5, jacks +0.4, jumps -0.3
+  Gull's Arrows 4                                           42 charts  holds +1.1, xo -0.5, rolls +0.5, nps -0.2
+  Kantai Collection PadColle                               115 charts  xo -0.4, bpm +0.2, gimmicks +0.2, jumps -0.2
+  MacGravel's Pad Pack I                                    30 charts  nps +1.7, holds +1.1, jumps -0.7, bpm +0.4
+  NIQ9's Originals                                         115 charts  gimmicks +0.3, jacks +0.3, brackets +0.1, mines -0.1
+  R21 Bringin' It Back                                      80 charts  mines +0.6, holds +0.5, rolls +0.2, jumps +0.2
+  Rikame's Simfiles 3                                      128 charts  xo -0.3, jumps -0.2, nps -0.1, jacks -0.1
+  Rodd's Revival                                            43 charts  nps +0.7, mines +0.6, jumps -0.5, xo -0.3
+  SDVX KAC 2012                                             41 charts  nps +0.7, bpm +0.7, xo -0.5, holds -0.4
+  Sharpnelshortz                                           151 charts  nps +0.5, jumps -0.5, bpm +0.4, holds +0.4
+  StreamVoltex ep.2                                        120 charts  nps +0.7, stream16 +0.5, xo -0.4, jumps -0.4
+  Sudziosis 3                                              155 charts  jumps -0.9, nps +0.5, xo -0.4, holds -0.2
+  Sudziosis 4                                              187 charts  jumps -0.8, nps +0.4, xo -0.4, brackets -0.2
+  Sudziosis 5                                              152 charts  jumps -0.7, xo -0.3, rolls +0.2, brackets -0.2
+  Sudziosis II                                              75 charts  nps +0.8, jumps -0.6, xo -0.4, holds -0.3
+  Tachyon Alpha                                            152 charts  nps +0.7, bpm +0.6, gimmicks +0.4, stream16 -0.3
+  Tachyon Epsilon                                          150 charts  xo -0.4, stream16 -0.3, fs -0.3, jumps -0.3
+  Tachyon Epsilon Short Cuts                                75 charts  nps +1.1, bpm +0.6, jumps -0.4, fs -0.4
+  TalonMix IV                                              140 charts  bpm +0.9, jumps -0.7, gimmicks +0.7, xo -0.5
+  TalonMix V                                               145 charts  gimmicks +1.2, jumps -0.6, xo -0.5, bpm +0.4
+  TalonMix VI                                              150 charts  xo -0.5, rolls +0.5, gimmicks +0.4, jumps -0.3
+  TalonMix VII                                             140 charts  gimmicks +0.9, jumps -0.6, xo -0.5, rolls +0.4
+  TalonMix VIII                                            140 charts  jumps -0.6, xo -0.5, bpm +0.3, nps +0.2
+  The League Of Extraordinary Stepmen - Chapter 1          121 charts  mines +1.0, nps +0.7, gimmicks +0.5, jacks +0.5
+  The Nu-Virus Files                                       441 charts  xo -0.3, triplets +0.1, nps +0.1, gimmicks -0.1
+  Touhou Gensouyou ~ Illusionary Dance Fantasy             400 charts  xo -0.4, gimmicks +0.4, jacks +0.2, bpm +0.2
+  Touhou Kousaikai ~ Scarlet Festival Gathering (videoless) v3  428 charts  xo -0.4, gimmicks +0.3, rolls +0.3, holds +0.2
+  Tsunamix III [SM5]                                       256 charts  gimmicks +0.4, xo -0.4, bpm +0.2, jumps -0.2
+  Undefined Fantastic Original Simfiles                    100 charts  holds +0.4, triplets +0.3, jacks +0.2, mines +0.2
+  VGMPP                                                     50 charts  nps +0.4, stream16 +0.3, gimmicks +0.2, xo -0.2
+  Valex's Magical 4-Arrow Adventure 1                       95 charts  bpm -0.2, xo -0.2, stream16 +0.2, jumps -0.1
+  Valex's Magical 4-Arrow Adventure 2 r3                   130 charts  gimmicks +0.5, jumps -0.3, xo -0.3, nps +0.3
+  Valex's Magical 4-Arrow Adventure 3                      155 charts  nps +0.6, jumps -0.4, xo -0.4, triplets +0.3
+  Valex's Magical 4-Arrow Adventure 4                      170 charts  nps +0.8, xo -0.4, fs +0.3, brackets +0.3
+  Valex's Magical 4-Arrow Adventure 5                      150 charts  nps +0.6, xo -0.3, mines -0.1, brackets +0.1
+  Valex's Magical 4-Arrow Adventure 6                      145 charts  nps +0.4, xo -0.4, holds -0.3, jumps -0.2
+  Valex's Magical 4-Arrow Adventure 7                      150 charts  xo -0.4, nps +0.3, triplets +0.2, mines -0.2
+  Very Short Fantasy                                        56 charts  rolls +1.5, jacks +1.0, holds +0.8, nps +0.3
+  Vocaloid Project Pad Pack 2nd                            189 charts  xo -0.4, jumps -0.3, bpm +0.2, holds +0.2
+
+== group 5 (12 packs, 1554 charts)
+profile: xo +1.37, holds -0.37, jumps +0.34, jacks +0.24, fs +0.23, nps +0.23, stream16 +0.20, gimmicks +0.19, triplets -0.16, rolls -0.12, brackets +0.06, mines -0.01, bpm +0.01
+meter 8-10 medians (395 charts): nps 4.365, stream16 0.182, triplets 0.000, jumps 0.074, holds 0.027, rolls 0.000, mines 0.000, xo 3.793, fs 0.300, jacks 0.000, brackets 0.813, gimmicks 0.000, bpm 145.030
+  Crossover Spectrum Part I                                138 charts  xo +3.0, nps +0.9, stream16 +0.9, jacks -0.5
+  Crossover Spectrum Part II                                90 charts  xo +1.8, stream16 +0.6, triplets -0.5, holds -0.5
+  Crossover Spectrum Part III                               76 charts  xo +2.0, jacks +0.7, gimmicks +0.5, triplets -0.5
+  KoL DDR Before-Max Edit Pack                             229 charts  xo +1.2, holds -0.7, nps +0.4, fs +0.4
+  KoL DDR Post-5th & Pre-Supernova Edit Pack               240 charts  xo +1.3, nps +0.4, gimmicks -0.2, holds -0.2
+  NEMORIGINAL Collection Vol 2                              60 charts  xo +1.5, gimmicks +0.8, holds -0.6, jacks +0.6
+  NEMORIGINAL Collection Vol 3                              60 charts  xo +1.1, gimmicks +0.8, holds -0.7, jumps +0.6
+  NEMORIGINAL Collection Vol 4                              60 charts  gimmicks +1.2, mines +0.8, xo +0.7, jacks +0.5
+  NEMORIGINAL Soulja Boy Simfile Pack                       75 charts  jumps +1.3, xo +0.9, holds -0.7, stream16 -0.3
+  R21                                                       96 charts  xo +1.1, fs +0.6, jumps +0.5, holds -0.4
+  Stomp Exceed                                             371 charts  xo +0.8, jumps +0.7, brackets +0.5, holds -0.4
+  The NES Simfile Collab                                    59 charts  jacks +1.1, fs +1.0, xo +0.9, stream16 +0.9
+
+all packs, meter 8-10 medians (5108 charts): nps 4.229, stream16 0.155, triplets 0.000, jumps 0.054, holds 0.048, rolls 0.000, mines 0.000, xo 0.983, fs 0.149, jacks 0.000, brackets 0.314, gimmicks 0.000, bpm 142.000

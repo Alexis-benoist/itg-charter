@@ -107,6 +107,11 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   des densités par mesure 0,28 ; reprise du rythme des mesures similaires 42,7 % (humain 47,3 %).
   Plus de données n'y change rien (×4,9 charts, `fit_placement --max-train 1500`) : la régression
   logistique est limitée par sa capacité (log-loss train ≈ test), pas par les données.
+- Styles (`training/STYLES.md`, exemple `pack_styles`) : 5 styles de packs ; les Songs du jeu sont
+  toutes « classique ITG », les packs ajoutés surtout « stream » (plus denses, peu de sauts et de
+  crossovers). Sur les Songs du jeu, le modèle entraîné sur elles seules bat celui du corpus élargi
+  (perplexité 1,729 contre 1,766 bit/ligne, `eval/perplexity-test-game-songs.txt`) ; plafond humain
+  du placement : F médian 71 % entre deux charters (`eval/human-agreement.txt`).
 - Flèches ↔ musique : la hauteur du mix ne prédit pas la direction (corrélation ≈ 0) ; seul
   l'accent compte (sauts ×2), cf. `eval/music-signal-train.txt`.
 - Données : `Simfile::is_generated()` exclut nos propres simfiles (liens vers des chansons

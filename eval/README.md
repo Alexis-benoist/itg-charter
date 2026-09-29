@@ -31,3 +31,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `human-agreement.txt` | plafond : deux charters humains sur la même chanson et la même difficulté (F après alignement, ±25 ms) |
 | `perplexity-test.txt` | bits par ligne des charts humains du split test d'`~/itg-train` selon le n-gramme de flèches, modèles entraînés sur le split train seul (Songs du jeu ; courbe d'apprentissage 1/8 → 1/1 d'`~/itg-train`) |
 | `perplexity-test-game-songs.txt` | idem sur le split test des Songs du jeu : le modèle des Songs du jeu y bat celui du corpus élargi |
+| `pack-styles.txt` | styles de charting par pack (z-scores à meter égal, k-means à 5 groupes), décrits dans `training/STYLES.md` |
