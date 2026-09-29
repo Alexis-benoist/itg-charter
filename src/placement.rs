@@ -14,10 +14,9 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub const PLACEMENT_VERSION: u32 = 3;
+pub const PLACEMENT_VERSION: u32 = 1;
 /// snap (4) + beat in bar (4) + mix + 4 bands + loudness + local density + salience + onset
-/// + section context (measure / phrase loudness, kick band, onset count)
-pub const FEATURES: usize = 21;
+pub const FEATURES: usize = 17;
 pub const FEATURE_NAMES: [&str; FEATURES] = [
     "snap 4th",
     "snap 8th",
@@ -36,10 +35,6 @@ pub const FEATURE_NAMES: [&str; FEATURES] = [
     "local density",
     "salience",
     "onset here",
-    "measure loudness",
-    "phrase loudness",
-    "measure kick",
-    "measure onsets",
 ];
 
 /// Model shipped with the binary.
@@ -69,54 +64,6 @@ pub struct PlacementFeatures<'a> {
     rms_fps: f64,
     rms_ref: f32,
     onsets: BTreeSet<u32>,
-    /// Section context per measure (see [`section_context`]).
-    measures: Vec<[f32; 4]>,
-}
-
-/// Measure-level context, from the mix only (so that it is the same with and without
-/// stems): loudness of the measure and of its 8-measure phrase, kick-band energy and
-/// onset count, each relative to the song's median measure (capped at 3).
-fn section_context(a: &SongAnalysis) -> Vec<[f32; 4]> {
-    let grid = &a.grid;
-    let n = (grid.beat(a.duration) / 4.0).ceil().max(1.0) as usize;
-    let span = |m: usize| (grid.time(4.0 * m as f64), grid.time(4.0 * (m + 1) as f64));
-    let fps = a.mix.envelope.fps;
-    let mean = |v: &[f32], m: usize| -> f32 {
-        let (t0, t1) = span(m);
-        let (i0, i1) = ((t0 * fps).max(0.0) as usize, (t1 * fps).max(0.0) as usize);
-        let s = v.get(i0.min(v.len())..i1.min(v.len())).unwrap_or(&[]);
-        if s.is_empty() {
-            0.0
-        } else {
-            s.iter().sum::<f32>() / s.len() as f32
-        }
-    };
-    let relative = |v: Vec<f32>| -> Vec<f32> {
-        let r = percentile(&v, 0.5);
-        v.into_iter().map(|x| (x / r).min(3.0)).collect()
-    };
-    let loud = relative((0..n).map(|m| mean(&a.mix.rms, m)).collect());
-    let empty = Vec::new();
-    let kick = relative(
-        (0..n)
-            .map(|m| mean(a.bands.first().map_or(&empty, |e| &e.values), m))
-            .collect(),
-    );
-    let mut counts = vec![0f32; n];
-    for &(t, _) in &a.mix.onsets {
-        let m = (grid.beat(t) / 4.0).floor();
-        if m >= 0.0 && (m as usize) < n {
-            counts[m as usize] += 1.0;
-        }
-    }
-    let counts = relative(counts);
-    (0..n)
-        .map(|m| {
-            let phrase = m.saturating_sub(3)..(m + 5).min(n);
-            let phrase_loud = loud[phrase.clone()].iter().sum::<f32>() / phrase.len() as f32;
-            [loud[m], phrase_loud, kick[m], counts[m]]
-        })
-        .collect()
 }
 
 impl<'a> PlacementFeatures<'a> {
@@ -136,7 +83,6 @@ impl<'a> PlacementFeatures<'a> {
             rms_fps: a.mix.envelope.fps,
             rms_ref: percentile(&a.mix.rms, 0.95),
             onsets,
-            measures: section_context(a),
         }
     }
 
@@ -173,8 +119,6 @@ impl<'a> PlacementFeatures<'a> {
         let neighbours = (around[3] + around[4]) / 2.0;
         f[15] = mix - neighbours;
         f[16] = self.onsets.contains(&pos) as u8 as f32;
-        let m = ((pos / 192) as usize).min(self.measures.len() - 1);
-        f[17..21].copy_from_slice(&self.measures[m]);
         f
     }
 }
