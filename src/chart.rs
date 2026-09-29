@@ -26,8 +26,12 @@ pub struct GenOptions {
     pub parity_weight: f64,
     /// Scale of the Gumbel noise (0 = deterministic arg-max regardless of seed).
     pub temperature: f64,
-    /// Bonus (nats) for reusing the arrow of the matching note of a similar measure.
-    pub repeat_bonus: f64,
+    /// Bonus (nats) for reusing the arrow of the matching note of a similar measure, per
+    /// difficulty. Measured with `examples/eval_arrows.rs` (train split): humans keep
+    /// the same arrows in 20% of repeated measures in Beginner, 5-10% above; a single
+    /// bonus of 1.5 gave 66% / 31%. Values closest to the human share (of 0, 0.25,
+    /// 0.5, 1, 1.5).
+    pub repeat_bonus: [f64; 5],
     /// Minimum cosine similarity for two measures to count as a repetition.
     pub repeat_similarity: f64,
 }
@@ -38,7 +42,7 @@ impl Default for GenOptions {
             beam_width: 12,
             parity_weight: 0.02,
             temperature: 0.4,
-            repeat_bonus: 1.5,
+            repeat_bonus: [0.25, 0.0, 0.5, 0.5, 0.5],
             repeat_similarity: 0.9,
         }
     }
@@ -549,6 +553,7 @@ pub fn select_arrows(
     grid: &Grid,
     table: &ProbTable,
     repeats: &[Option<usize>],
+    d: Difficulty,
     opts: &GenOptions,
     rng: &mut ChaCha8Rng,
 ) -> Vec<u8> {
@@ -622,7 +627,7 @@ pub fn select_arrows(
                 let u: f64 = rng.gen_range(1e-12..1.0);
                 let gumbel = -(-u.ln()).ln();
                 let bonus = if reference == Some(m) {
-                    opts.repeat_bonus
+                    opts.repeat_bonus[d.index()]
                 } else {
                     0.0
                 };
@@ -811,7 +816,7 @@ pub fn generate_for_meter(
     let (density, notes, mut rng) = best;
     let repeats = find_repeats(a, &notes, opts.repeat_similarity);
     let table = model.table(style);
-    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, &mut rng);
+    let masks = select_arrows(&notes, &a.grid, &table, &repeats, style, opts, &mut rng);
     let rows = to_rows(&notes, &masks);
     let written = model.meter_for_density(density);
     OutChart {
@@ -829,7 +834,7 @@ pub fn generate(a: &SongAnalysis, model: &Model, d: Difficulty, seed: u64, opts:
     let notes = place_notes(a, model, d, &mut rng);
     let repeats = find_repeats(a, &notes, opts.repeat_similarity);
     let table = model.table(d);
-    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, &mut rng);
+    let masks = select_arrows(&notes, &a.grid, &table, &repeats, d, opts, &mut rng);
     let rows = to_rows(&notes, &masks);
     let meter = estimate_meter(&rows, &a.grid, model, d);
     OutChart {

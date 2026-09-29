@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     if let [pw, t, rb] = &args.get(2..5).unwrap_or(&[]) {
         gen_opts.parity_weight = pw.parse()?;
         gen_opts.temperature = t.parse()?;
-        gen_opts.repeat_bonus = rb.parse()?;
+        gen_opts.repeat_bonus = [rb.parse()?; 5];
     }
     println!("{gen_opts:?}");
     let mut songs = Vec::new();

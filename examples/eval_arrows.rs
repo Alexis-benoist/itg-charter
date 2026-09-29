@@ -99,7 +99,7 @@ struct Song {
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let usage = "usage: eval_arrows SONGS_DIR [--max N] [--split S] [--tag T]";
+    let usage = "usage: eval_arrows SONGS_DIR [--max N] [--split S] [--tag T] [--repeat-bonus B,B,…]";
     let dir = PathBuf::from(args.first().expect(usage));
     let opt = |name: &str| {
         args.iter()
@@ -111,7 +111,19 @@ fn main() -> anyhow::Result<()> {
     let split = opt("--split").unwrap_or_else(|| "test".into());
     let tag = opt("--tag").unwrap_or_else(|| split.clone());
     let model = Model::embedded()?;
-    let gen_opts = GenOptions::default();
+    // One generation per repeat_bonus value (default: the generator's).
+    let gen_opts: Vec<GenOptions> = match opt("--repeat-bonus") {
+        Some(list) => list
+            .split(',')
+            .map(|b| {
+                Ok(GenOptions {
+                    repeat_bonus: [b.parse()?; 5],
+                    ..GenOptions::default()
+                })
+            })
+            .collect::<anyhow::Result<_>>()?,
+        None => vec![GenOptions::default()],
+    };
 
     let mut songs = Vec::new();
     for path in find_simfiles(&dir) {
@@ -159,8 +171,9 @@ fn main() -> anyhow::Result<()> {
         picked.len()
     );
 
-    // [difficulty] -> (human, ours) counts per kind
-    let counts = Mutex::new([([0u64; 5], [0u64; 5]); 5]);
+    // [option set][difficulty] -> (human, ours) counts per kind
+    type Counts = [([u64; 5], [u64; 5]); 5];
+    let counts: Mutex<Vec<Counts>> = Mutex::new(vec![[([0u64; 5], [0u64; 5]); 5]; gen_opts.len()]);
     let next = Mutex::new(0usize);
     std::thread::scope(|s| {
         for _ in 0..std::thread::available_parallelism().map_or(4, |n| n.get()) {
@@ -182,7 +195,7 @@ fn main() -> anyhow::Result<()> {
                         ..AnalysisOptions::default()
                     };
                     let a = SongAnalysis::compute(&audio, None, &opts);
-                    let mut local = [([0u64; 5], [0u64; 5]); 5];
+                    let mut local: Vec<Counts> = vec![[([0u64; 5], [0u64; 5]); 5]; gen_opts.len()];
                     let mut done = [false; 5];
                     for chart in &song.sim.charts {
                         if chart.steps_type != "dance-single" {
@@ -201,19 +214,29 @@ fn main() -> anyhow::Result<()> {
                         if notes.len() < 16 {
                             continue;
                         }
-                        classify(&a, &notes, &masks, &mut local[d.index()].0);
+                        let mut human = [0u64; 5];
+                        classify(&a, &notes, &masks, &mut human);
+                        for l in local.iter_mut() {
+                            for (t, h) in l[d.index()].0.iter_mut().zip(human) {
+                                *t += h;
+                            }
+                        }
                         if !done[d.index()] {
                             done[d.index()] = true;
-                            let ours = generate(&a, &model, d, SEED, &gen_opts);
-                            let (notes, masks) = notes_of(ours.rows.iter().copied());
-                            classify(&a, &notes, &masks, &mut local[d.index()].1);
+                            for (l, o) in local.iter_mut().zip(&gen_opts) {
+                                let ours = generate(&a, &model, d, SEED, o);
+                                let (notes, masks) = notes_of(ours.rows.iter().copied());
+                                classify(&a, &notes, &masks, &mut l[d.index()].1);
+                            }
                         }
                     }
                     let mut all = counts.lock().unwrap();
-                    for (t, l) in all.iter_mut().zip(local) {
-                        for k in 0..5 {
-                            t.0[k] += l.0[k];
-                            t.1[k] += l.1[k];
+                    for (ta, la) in all.iter_mut().zip(local) {
+                        for (t, l) in ta.iter_mut().zip(la) {
+                            for k in 0..5 {
+                                t.0[k] += l.0[k];
+                                t.1[k] += l.1[k];
+                            }
                         }
                     }
                     eprintln!("[{k}] {}", song.title);
@@ -230,17 +253,20 @@ fn main() -> anyhow::Result<()> {
         picked.len()
     );
     let header: Vec<String> = KINDS.iter().map(|k| format!("{k:>21}")).collect();
-    let _ = writeln!(out, "{:<10} | {:>13} | {}", "", "pairs h / o", header.join(" |"));
-    let mut total = ([0u64; 5], [0u64; 5]);
-    for d in Difficulty::ALL {
-        let (h, o) = counts[d.index()];
-        for k in 0..5 {
-            total.0[k] += h[k];
-            total.1[k] += o[k];
+    for (c, o) in counts.iter().zip(&gen_opts) {
+        let _ = writeln!(out, "\nrepeat_bonus {:?}", o.repeat_bonus);
+        let _ = writeln!(out, "{:<10} | {:>13} | {}", "", "pairs h / o", header.join(" |"));
+        let mut total = ([0u64; 5], [0u64; 5]);
+        for d in Difficulty::ALL {
+            let (h, o) = c[d.index()];
+            for k in 0..5 {
+                total.0[k] += h[k];
+                total.1[k] += o[k];
+            }
+            let _ = writeln!(out, "{}", line(d.name(), &h, &o));
         }
-        let _ = writeln!(out, "{}", line(d.name(), &h, &o));
+        let _ = writeln!(out, "{}", line("All", &total.0, &total.1));
     }
-    let _ = writeln!(out, "{}", line("All", &total.0, &total.1));
     let _ = writeln!(out, "(each cell: human % / ours %)");
     print!("{out}");
     std::fs::create_dir_all("eval")?;
