@@ -55,7 +55,8 @@ itg-charter train <Songs/>              # réentraîne model/model.json
 | `synth.rs` | signaux de test synthétiques (tests + fixture) |
 
 Principe : **aucune règle de pattern inventée à la main**. Le « naturel » vient du modèle appris
-(`model/model.json`, entraîné sur les ~6800 charts dance-single du dossier Songs du jeu, embarqué
+(`model/model.json`, entraîné sur 19 321 charts dance-single — Songs du jeu + 125 packs de
+`training/packs.tsv`, voir `training/PLAN.md` et l'exemple `count_charts` —, embarqué
 dans le binaire via `include_str!`), le « jouable » vient des coûts de parité d'ITGmania.
 
 ## Règles à respecter
@@ -101,9 +102,11 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   97,5 % calés (< 30 ms), 1,7 % d'erreurs d'un demi-temps, phase médiane 5,0 ms, 94 % sous 20 ms.
   Limites connues : choix d'octave (le prior seul n'y fait rien, cf. `fit_octave`) ; boucles EDM
   synthétiques à contretemps (tests `#[ignore]` dans `analysis.rs`).
-- Placement (split test, 300 morceaux, grille humaine) : F-score 70,0 % avec notre nombre de
-  lignes, 73,0 % à nombre égal (hasard 49,7 %) ; corrélation des densités par mesure 0,32 ;
-  reprise du rythme des mesures similaires 46,6 % (humain 46,0 %).
+- Placement (split test, 300 morceaux, grille humaine, corpus `~/itg-train` de 19 321 charts) :
+  F-score 69,4 % avec notre nombre de lignes, 72,7 % à nombre égal (hasard 49,9 %) ; corrélation
+  des densités par mesure 0,28 ; reprise du rythme des mesures similaires 42,7 % (humain 47,3 %).
+  Plus de données n'y change rien (×4,9 charts, `fit_placement --max-train 1500`) : la régression
+  logistique est limitée par sa capacité (log-loss train ≈ test), pas par les données.
 - Flèches ↔ musique : la hauteur du mix ne prédit pas la direction (corrélation ≈ 0) ; seul
   l'accent compte (sauts ×2), cf. `eval/music-signal-train.txt`.
 - Données : `Simfile::is_generated()` exclut nos propres simfiles (liens vers des chansons
