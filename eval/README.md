@@ -30,3 +30,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `placement-test-A1-baseline.txt` | référence `HEAD` relancée sur la bibliothèque actuelle (le nombre de morceaux a changé depuis les résumés précédents) |
 | `placement-test-A1-section.txt` | A1 : + 6 indices de section (volume mesure / phrase, bande kick, onsets par mesure, changement de section, position) — log-loss test meilleure partout, mais corrélation par mesure 0,316 → 0,293 (régression) |
 | `placement-test-A1b-energy.txt` | A1b : A1 sans « changement de section » ni « position » (4 indices d'énergie) — corrélation 0,290, F 67,5 % : pire que la référence ; A1 abandonné, retour au modèle v1 |
+| `arrows-test-baseline.txt` | B1 : sur les mesures répétées (même rythme, cosinus audio ≥ 0,9), flèches identiques / miroir G-D / inversion H-B / rotation / autres — humain 8,4 % identiques, nous 48,9 % (`repeat_bonus` 1,5) |
