@@ -569,7 +569,8 @@ fn bpm_histogram(bpms: &[f64]) -> Vec<f64> {
     let mut h = vec![0.0; bins];
     for &b in bpms {
         let x = (b / BPM_PRIOR_MIN).log2() * BPM_PRIOR_BINS_PER_OCTAVE;
-        if (0.0..bins as f64).contains(&x) {
+        // The last half bin would round past the end.
+        if (0.0..bins as f64 - 0.5).contains(&x) {
             h[x.round() as usize] += 1.0;
         }
     }
