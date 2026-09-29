@@ -35,6 +35,9 @@ itg-charter train <Songs/>              # entraîne un modèle sur un dossier
   - `cargo run --release --example fit_placement -- $SONGS` — réajuste `model/placement.json`
     (régression logistique par difficulté, train ; log-loss rapportée sur test) ;
   - `cargo run --release --example music_signal -- $SONGS` — la musique prédit-elle les flèches ?
+  - `eval_patterns -- DIR --style S` (escaliers, drills, candles, streams, répétition, vs humains du
+    style), `eval_context -- DIR` (bits par ligne selon la longueur de contexte),
+    `eval_perplexity`, `eval_human_agreement`, `pack_styles`, `count_charts` : voir `eval/README.md`.
   - `ITGMANIA_DIR=… cargo run --release --example parity_check` — notre parité vs `#TECHCOUNTS`
     du cache du jeu (`~/.itgmania/Cache/Songs`).
   Relancer l'éval concernée après toute modification de l'analyse, du générateur ou de la parité.
@@ -125,3 +128,8 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   générées dans Songs/) de tout entraînement et de toute évaluation.
 - Charts (40 morceaux × 5 difficultés) : toutes les médianes (NPS, sauts, holds, crossovers,
   footswitches, jacks, double-steps, meter) dans l'intervalle p10–p90 humain.
+  Mais au-delà de 2 lignes (`eval_patterns`, patterns sur les runs de notes simples) : en Hard et
+  Challenge, **trop de drills** (Challenge classique : 42 lignes / 100 contre 5,4 en médiane
+  humaine, p90 18), **trop peu d'escaliers** (1,8 contre 7,6) **et de candles** (2,0 contre 6,6) ;
+  5 écarts en classique, 4 en stream, 1 en tech. Le n-gramme ne voit que 2 lignes
+  (`eval_context` : ordre 4 = −0,10 bit/ligne en classique, ordre 5 = −0,17 en stream).
