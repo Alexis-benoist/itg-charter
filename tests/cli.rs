@@ -218,3 +218,17 @@ fn default_charts_are_full_range_and_meters_are_configurable() {
     assert!(String::from_utf8_lossy(&bad.stderr).contains("out of range 1..=10"));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn style_is_reproducible_and_changes_the_chart() {
+    let chart = |name: &str, style: &str| {
+        let dir = out_dir(name);
+        let sm = generate_song(&dir, &["-d", "hard", "-s", "3", "--style", style]);
+        let text = std::fs::read_to_string(&sm).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        text
+    };
+    let tech = chart("style-tech-a", "tech");
+    assert_eq!(tech, chart("style-tech-b", "tech"));
+    assert_ne!(tech, chart("style-classic", "classic"));
+}

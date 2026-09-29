@@ -67,6 +67,7 @@ itg-charter gen song.ogg -p beginner         # meters 2, 3, 4, 5
 itg-charter gen song.ogg -m 1,3-5            # any meters on the 1-10 scale (at most 5)
 itg-charter gen song.ogg -d easy,hard        # difficulty slots with the density of human charts
 itg-charter gen song.ogg -s 42               # another seed: other arrows, same sync
+itg-charter gen song.ogg --style tech        # charting style: classic (default), stream, tech
 itg-charter analyze song.ogg                 # detected BPM and offset only
 ```
 
@@ -89,9 +90,15 @@ The same audio, options and seed always give byte-identical `.sm` files.
    **ITGmania's parity computation** (foot comfort: crossovers, footswitches, double-steps…), with
    noise controlled by the seed.
 
-The pattern model (`model/model.json`, embedded in the binary) was trained with
-`itg-charter train <Songs folder>` on a library of ~1,600 community simfiles (~6,800 dance-single
-charts). You can retrain it on your own songs and pass the result with `--model`.
+The pattern models are learned from ~19,300 dance-single charts of 131 community packs, grouped
+into charting styles (`training/STYLES.md`), one model per style embedded in the binary:
+
+- `classic` (default, 9,195 charts): ITG3, Rebirth, JBEAN… average density, jumps, some crossovers;
+- `stream` (7,820 charts): denser and faster, few jumps, almost no crossovers;
+- `tech` (1,549 charts): many crossovers and footswitches, few holds.
+
+You can train a model on your own songs with `itg-charter train <folder> -o my.json` and pass it
+with `--model my.json`.
 
 ## Measured accuracy
 

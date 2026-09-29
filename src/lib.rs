@@ -16,4 +16,5 @@ pub mod placement;
 pub mod simfile;
 pub mod song;
 pub mod stems;
+pub mod style;
 pub mod synth;

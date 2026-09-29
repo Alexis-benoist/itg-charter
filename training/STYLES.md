@@ -65,6 +65,20 @@ des homebrews de l'époque ITG2.
 Kyzentun's Krap, Kyzentuns Handjobs : triolets, rolls, mines, crossovers, très peu de sauts. Un
 style d'auteur isolé.
 
+## Utilisation : `--style`
+
+`itg-charter gen song.mp3 --style classic|stream|tech` (défaut : `classic`). Un modèle de flèches
+par style, embarqué ; les deux petits groupes (gimmick, 590 charts ; Kyzentun, 76) n'en ont pas.
+`training/styles.tsv` associe chaque pack à son style : déplacer un pack = modifier sa ligne, puis
+`cargo run --release --example train_styles -- ~/itg-train` (dossier de liens vers tous les packs)
+réécrit `model/model.json` (classique) et `model/styles/*.json`. Le placement reste commun.
+
+Contrôle (`eval_charts`, 40 morceaux du style) : classique et stream 0 statistique hors de
+l'intervalle p10–p90 humain. Tech : au poids de parité par défaut (0,02) le générateur ne fait
+presque pas de crossovers (0,3 / 100 lignes en Medium, humain 4,7) ; poids balayé
+(`eval/charts-style-tech-pw*.txt`) : 0,01 → 1,9 ; **0,005 → 4,2 (retenu, 0 hors intervalle)** ;
+0 → 12,6 (au-dessus du p90).
+
 ## Conséquences pour le modèle
 
 - `eval_perplexity` : sur le split test des Songs du jeu, le modèle entraîné sur ces seules Songs

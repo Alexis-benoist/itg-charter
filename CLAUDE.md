@@ -7,7 +7,8 @@ identique à l'octet.
 ```
 itg-charter gen song.mp3 -d easy,medium,hard -s 42 -o ~/.itgmania/Songs/Generated
 itg-charter analyze song.mp3            # BPM / offset détectés
-itg-charter train <Songs/>              # réentraîne model/model.json
+itg-charter gen song.mp3 --style tech   # style : classic (défaut), stream, tech
+itg-charter train <Songs/>              # entraîne un modèle sur un dossier
 ```
 
 ## Commandes
@@ -51,13 +52,15 @@ itg-charter train <Songs/>              # réentraîne model/model.json
 | `chart.rs` | placement des notes (probabilités apprises, quotas par mesure, reprise du rythme) + choix des flèches (beam search) + meter |
 | `music.rs` | indices musicaux par note (hauteur yinfast, type de frappe, accent) ; split train/test partagé (`split_of`) |
 | `simfile.rs` | lecture `.sm`/`.ssc`, timing, écriture `.sm` |
+| `style.rs` | styles de charting (`--style`) : modèle embarqué et `GenOptions` par style |
 | `difficulty.rs` | les 5 difficultés, parsing, sel de seed par difficulté |
 | `synth.rs` | signaux de test synthétiques (tests + fixture) |
 
 Principe : **aucune règle de pattern inventée à la main**. Le « naturel » vient du modèle appris
-(`model/model.json`, entraîné sur les 9 195 charts dance-single du style « classique ITG » —
-48 packs listés dans `training/classic-packs.txt`, dont les Songs du jeu, voir `training/STYLES.md` ;
-`model/placement.json` est ajusté sur tout le corpus élargi de 19 321 charts —, embarqué
+(un modèle de flèches par style, `--style` : `model/model.json` = classique, 9 195 charts, défaut ;
+`model/styles/{stream,tech}.json` ; packs de chaque style dans `training/styles.tsv`, reconstruits
+par `cargo run --release --example train_styles -- ~/itg-train`, voir `training/STYLES.md` ;
+`model/placement.json`, commun, est ajusté sur tout le corpus élargi de 19 321 charts —, embarqués
 dans le binaire via `include_str!`), le « jouable » vient des coûts de parité d'ITGmania.
 
 ## Règles à respecter
@@ -76,7 +79,8 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   incrémenter `MODEL_VERSION` et réentraîner.
 - **Calibrations** mesurées, pas devinées : `ENVELOPE_LATENCY` (17 ms, via `eval_sync`) ;
   `HALF_BEAT_WEIGHTS` (via `fit_sync`) ; `TEMPO_PRIOR_*` (via `fit_octave`) ;
-  `GenOptions::default()` (via `eval_charts`). Ajuster sur train, mesurer sur test, documenter.
+  `GenOptions::default()` (via `eval_charts`) ; poids de parité du style tech (0,005, via
+  `eval_charts` sur ses packs, cf. `Style::gen_options`). Ajuster sur train, mesurer sur test, documenter.
 - **Un commit par expérience**, y compris celles qui régressent, avec les chiffres mesurés dans le
   message et le résumé `eval/*.txt` ajouté (voir `eval/README.md`).
 - **MP3** : symphonia est gapless, le jeu non ; `audio.rs` ajoute en tête le silence que le jeu joue

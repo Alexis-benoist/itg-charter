@@ -5,11 +5,12 @@
 
 use crate::analysis::{AnalysisOptions, SongAnalysis, Stems};
 use crate::audio::decode_file;
-use crate::chart::{GenOptions, assign_slots, generate, generate_for_meter};
+use crate::chart::{assign_slots, generate, generate_for_meter};
 use crate::difficulty::Difficulty;
 use crate::model::Model;
 use crate::simfile::{SongInfo, Visuals, apply_visuals, render_sm, sanitize};
 use crate::stems::{self, StemOptions};
+use crate::style::Style;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
@@ -99,8 +100,10 @@ pub struct SongOptions {
     pub stems: bool,
     /// Torch device for Demucs.
     pub device: Option<String>,
-    /// Model file (default: the embedded model).
+    /// Model file (default: the embedded model of `style`).
     pub model: Option<PathBuf>,
+    /// Charting style, when no model file is given.
+    pub style: Style,
     pub visuals: VisualFiles,
 }
 
@@ -117,6 +120,7 @@ impl Default for SongOptions {
             stems: true,
             device: None,
             model: None,
+            style: Style::default(),
             visuals: VisualFiles::default(),
         }
     }
@@ -181,7 +185,7 @@ pub fn install_visuals(files: &VisualFiles, dir: &Path) -> Result<Visuals> {
 pub fn create_song(audio_path: &Path, opts: &SongOptions) -> Result<PathBuf> {
     let model = match &opts.model {
         Some(p) => Model::from_json(&std::fs::read_to_string(p)?)?,
-        None => Model::embedded()?,
+        None => opts.style.model()?,
     };
     // (slot, target meter) of each chart, checked before the (slow) analysis.
     let plan: Vec<(Difficulty, Option<u32>)> = match &opts.charts {
@@ -221,7 +225,7 @@ pub fn create_song(audio_path: &Path, opts: &SongOptions) -> Result<PathBuf> {
     let music = install_file(audio_path, &dir)?;
     let visuals = install_visuals(&opts.visuals, &dir)?;
 
-    let gen_opts = GenOptions::default();
+    let gen_opts = opts.style.gen_options();
     let charts: Vec<_> = plan
         .iter()
         .map(|&(d, meter)| {

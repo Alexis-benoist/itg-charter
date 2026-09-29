@@ -4,6 +4,7 @@ use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
 use itg_charter::difficulty::{Difficulty, parse_list};
 use itg_charter::model::Model;
 use itg_charter::song::{self, Charts, SongOptions, VisualFiles};
+use itg_charter::style::Style;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -108,9 +109,12 @@ struct GenArgs {
     /// Torch device for Demucs (cuda or cpu).
     #[arg(long)]
     device: Option<String>,
-    /// Model file (default: the model embedded in the binary).
-    #[arg(long)]
+    /// Model file (default: the model of --style embedded in the binary).
+    #[arg(long, conflicts_with = "style")]
     model: Option<PathBuf>,
+    /// Charting style learned from human packs (see training/STYLES.md).
+    #[arg(long, value_enum, default_value_t)]
+    style: Style,
     #[command(flatten)]
     visuals: VisualArgs,
 }
@@ -134,6 +138,7 @@ fn main() -> Result<()> {
                 stems: !args.no_stems,
                 device: args.device,
                 model: args.model,
+                style: args.style,
                 visuals: args.visuals.into(),
             };
             println!("{}", song::create_song(&args.audio, &opts)?.display());
