@@ -55,8 +55,9 @@ itg-charter train <Songs/>              # réentraîne model/model.json
 | `synth.rs` | signaux de test synthétiques (tests + fixture) |
 
 Principe : **aucune règle de pattern inventée à la main**. Le « naturel » vient du modèle appris
-(`model/model.json`, entraîné sur 19 321 charts dance-single — Songs du jeu + 125 packs de
-`training/packs.tsv`, voir `training/PLAN.md` et l'exemple `count_charts` —, embarqué
+(`model/model.json`, entraîné sur les 9 195 charts dance-single du style « classique ITG » —
+48 packs listés dans `training/classic-packs.txt`, dont les Songs du jeu, voir `training/STYLES.md` ;
+`model/placement.json` est ajusté sur tout le corpus élargi de 19 321 charts —, embarqué
 dans le binaire via `include_str!`), le « jouable » vient des coûts de parité d'ITGmania.
 
 ## Règles à respecter
@@ -107,6 +108,8 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   des densités par mesure 0,28 ; reprise du rythme des mesures similaires 42,7 % (humain 47,3 %).
   Plus de données n'y change rien (×4,9 charts, `fit_placement --max-train 1500`) : la régression
   logistique est limitée par sa capacité (log-loss train ≈ test), pas par les données.
+  Modèle actuel (flèches « classique », placement corpus complet), split test du style classique :
+  F 68,7 % / 70,6 % à nombre égal, corrélation 0,30, `outside human range: 0`.
 - Styles (`training/STYLES.md`, exemple `pack_styles`) : 5 styles de packs ; les Songs du jeu sont
   toutes « classique ITG », les packs ajoutés surtout « stream » (plus denses, peu de sauts et de
   crossovers). Sur les Songs du jeu, le modèle entraîné sur elles seules bat celui du corpus élargi
