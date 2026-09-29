@@ -1,0 +1,14 @@
+Tempo of the human simfiles in Songs/ (one simfile per song folder, .ssc preferred,
+generated songs excluded), from #BPMS / #STOPS:
+
+songs                              936
+constant BPM, no stops             564  (60.3%)
+with stops                         258  (27.6%)
+several BPM values                 202  (21.6%)
+  only x2 / x0.5 (half/double time) 120  (12.8%)  charting choice, not the audio
+  drift < 3% (live recordings)       24  ( 2.6%)
+  real tempo change                  58  ( 6.2%)
+  more than 20 BPM changes            1
+
+=> audible tempo changes (drift + real change): 82 songs, 8.8%, all excluded from the
+   sync / placement evaluations today (constant tempo required).

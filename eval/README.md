@@ -33,3 +33,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `arrows-test-baseline.txt` | B1 : sur les mesures répétées (même rythme, cosinus audio ≥ 0,9), flèches identiques / miroir G-D / inversion H-B / rotation / autres — humain 8,4 % identiques, nous 48,9 % (`repeat_bonus` 1,5) |
 | `arrows-train-bonus-sweep.txt` | B2 : balayage de `repeat_bonus` (0 ; 0,25 ; 0,5 ; 1 ; 1,5) sur train |
 | `arrows-test-B2-per-difficulty.txt` | B2 : `repeat_bonus` par difficulté [0,25 ; 0 ; 0,5 ; 0,5 ; 0,5] — flèches identiques 48,9 % → 9,1 % (humain 8,4 %) ; `eval_charts` : 0 hors intervalle humain |
+| `tempo-library.txt` | C1 : tempos de la bibliothèque — 60 % constants, 12,8 % seulement ×2/÷2, 8,8 % de vrais changements de tempo audibles (dérive live ou changement) |
