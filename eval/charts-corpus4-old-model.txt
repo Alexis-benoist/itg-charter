@@ -1,0 +1,47 @@
+GenOptions { beam_width: 12, parity_weight: 0.02, temperature: 0.4, repeat_bonus: 1.5, repeat_similarity: 0.9 }
+== Beginner (40 charts)
+           nps: ours median   0.877 | human p10   0.434 p50   0.592 p90   1.000
+    jump_ratio: ours median   0.092 | human p10   0.022 p50   0.093 p90   0.188
+    hold_ratio: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+        xo/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   3.571
+        fs/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+     jacks/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+   dblstep/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+         meter: ours median   2.000 | human p10   1.000 p50   1.000 p90   2.000
+== Easy (40 charts)
+           nps: ours median   1.984 | human p10   0.955 p50   1.265 p90   2.029
+    jump_ratio: ours median   0.049 | human p10   0.013 p50   0.048 p90   0.116
+    hold_ratio: ours median   0.089 | human p10   0.017 p50   0.089 p90   0.176
+        xo/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.797
+        fs/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+     jacks/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+   dblstep/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+         meter: ours median   4.000 | human p10   2.000 p50   3.000 p90   5.000
+== Medium (40 charts)
+           nps: ours median   2.996 | human p10   1.667 p50   2.113 p90   3.379
+    jump_ratio: ours median   0.055 | human p10   0.011 p50   0.055 p90   0.129
+    hold_ratio: ours median   0.066 | human p10   0.020 p50   0.066 p90   0.144
+        xo/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.787
+        fs/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+     jacks/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+   dblstep/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+         meter: ours median   6.000 | human p10   5.000 p50   6.000 p90   8.000
+== Hard (40 charts)
+           nps: ours median   3.923 | human p10   2.450 p50   3.158 p90   5.355
+    jump_ratio: ours median   0.048 | human p10   0.010 p50   0.048 p90   0.105
+    hold_ratio: ours median   0.040 | human p10   0.008 p50   0.039 p90   0.100
+        xo/100: ours median   0.260 | human p10   0.000 p50   0.296 p90   2.020
+        fs/100: ours median   0.270 | human p10   0.000 p50   0.000 p90   0.249  <-- outside human p10-p90
+     jacks/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+   dblstep/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+         meter: ours median   7.000 | human p10   7.000 p50   8.000 p90  12.000
+== Challenge (40 charts)
+           nps: ours median   5.280 | human p10   3.666 p50   4.568 p90   7.822
+    jump_ratio: ours median   0.036 | human p10   0.005 p50   0.036 p90   0.090
+    hold_ratio: ours median   0.021 | human p10   0.003 p50   0.022 p90   0.065
+        xo/100: ours median   0.150 | human p10   0.000 p50   0.270 p90   1.790
+        fs/100: ours median   0.197 | human p10   0.000 p50   0.000 p90   0.752
+     jacks/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.586
+   dblstep/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.169
+         meter: ours median   9.000 | human p10   9.000 p50   9.000 p90  14.000
+outside human range: 1
