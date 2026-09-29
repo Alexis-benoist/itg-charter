@@ -1,0 +1,5 @@
+/home/alexis/itg-train-classic: train 4566 charts, test 4629 charts (1576189 rows); bits per row, uniform = 3.907
+train share | order 1 (0 prev) | order 2 (1 prev) | order 3 (2 prev) | order 4 (3 prev) | order 5 (4 prev)
+1/4 ( 1142 charts) |          2.294 |          2.040 |          1.940 |          1.861 |          1.870
+1/2 ( 2283 charts) |          2.293 |          2.035 |          1.925 |          1.832 |          1.826
+1/1 ( 4566 charts) |          2.293 |          2.033 |          1.918 |          1.814 |          1.798
