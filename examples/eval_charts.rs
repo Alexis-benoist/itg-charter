@@ -3,9 +3,15 @@
 //! Generates every difficulty for a sample of songs (no stems, for speed) and prints,
 //! per difficulty, the median of each statistic next to the human p10–p50–p90.
 //!
+//! With `--style S`, the style's model and generation options are used (default: the
+//! classic model with `GenOptions::default()`); `--tag TAG` also writes the summary to
+//! `eval/charts-<TAG>.txt`.
+//!
 //! Usage: cargo run --release --example eval_charts -- SONGS_DIR [MAX_SONGS]
 //!        [parity_weight temperature repeat_bonus]   (to tune `GenOptions`)
+//!        [--style S] [--tag TAG]
 
+use clap::ValueEnum;
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
 use itg_charter::audio::decode_file;
 use itg_charter::chart::{GenOptions, generate};
@@ -13,21 +19,45 @@ use itg_charter::difficulty::Difficulty;
 use itg_charter::model::{ChartFeatures, Model, Quantiles, find_simfiles};
 use itg_charter::parity::Layout;
 use itg_charter::simfile::{NoteRow, Simfile, Timing};
+use itg_charter::style::Style;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 fn main() -> anyhow::Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let all: Vec<String> = std::env::args().skip(1).collect();
+    // `--key value` options, then the positional arguments.
+    let opt = |k: &str| all.iter().position(|a| a == k).and_then(|i| all.get(i + 1));
+    let mut args = Vec::new();
+    let mut it = all.iter();
+    while let Some(a) = it.next() {
+        if a.starts_with("--") {
+            it.next();
+        } else {
+            args.push(a.clone());
+        }
+    }
     let dir = PathBuf::from(args.first().expect("usage: eval_charts SONGS_DIR [MAX]"));
     let max: usize = args.get(1).and_then(|a| a.parse().ok()).unwrap_or(40);
-    let model = Model::embedded()?;
-    let mut gen_opts = GenOptions::default();
+    let style = opt("--style")
+        .map(|s| Style::from_str(s, true))
+        .transpose()
+        .map_err(anyhow::Error::msg)?;
+    let (model, mut gen_opts) = match style {
+        Some(s) => (s.model()?, s.gen_options()),
+        None => (Model::embedded()?, GenOptions::default()),
+    };
+    let tag = opt("--tag");
     if let [pw, t, rb] = &args.get(2..5).unwrap_or(&[]) {
         gen_opts.parity_weight = pw.parse()?;
         gen_opts.temperature = t.parse()?;
         gen_opts.repeat_bonus = rb.parse()?;
     }
-    println!("{gen_opts:?}");
+    let mut report = String::new();
+    if let Some(s) = style {
+        writeln!(report, "style {}", s.name())?;
+    }
+    writeln!(report, "{gen_opts:?}")?;
     let mut songs = Vec::new();
     for path in find_simfiles(&dir) {
         let Ok(sim) = Simfile::load(&path) else { continue };
@@ -119,7 +149,7 @@ fn main() -> anyhow::Result<()> {
             &s.doublesteps,
             &s.meter,
         ];
-        println!("== {} ({} charts)", d.name(), feats[d.index()].len());
+        writeln!(report, "== {} ({} charts)", d.name(), feats[d.index()].len())?;
         for (k, name) in names.iter().enumerate() {
             let ours = Quantiles::of(&feats[d.index()].iter().map(|f| f[k]).collect::<Vec<_>>());
             let h = human[k];
@@ -130,12 +160,20 @@ fn main() -> anyhow::Result<()> {
             } else {
                 ""
             };
-            println!(
+            writeln!(
+                report,
                 "  {name:>12}: ours median {:>7.3} | human p10 {:>7.3} p50 {:>7.3} p90 {:>7.3}{flag}",
                 ours.p50, h.p10, h.p50, h.p90
-            );
+            )?;
         }
     }
-    println!("outside human range: {flags}");
+    writeln!(report, "outside human range: {flags}")?;
+    print!("{report}");
+    if let Some(tag) = tag {
+        std::fs::write(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("eval/charts-{tag}.txt")),
+            &report,
+        )?;
+    }
     Ok(())
 }
