@@ -41,3 +41,4 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `patterns-sweep-*.txt`, `patterns-diag-*.txt` | températures 0,4 → 1,5 et bonus de répétition ; diagnostic beam / température / parité : le modèle seul échantillonné (beam 1, T 1, parité 0) est humain sur tous les patterns, la parité crée les drills |
 | `patterns-grid-*.txt`, `charts-grid-*.txt` | grille température × poids de parité (patterns + stats) ; retenu : T 0,7, parité 0,01 (tech 0,0025) |
 | `perplexity-test-{classic,stream,tech}-split.txt` | modèle du style vs modèle unique (tout le corpus), ordre 4, sur le split test de chaque style |
+| `charts-fsconst-classic-fsp*.txt`, `charts-fscum-classic-fsp*.txt` | pénalité de footswitch (nats) dans le beam, constante, style classique : sur le pas qui vient d'être posé (`fsconst`, sans effet : la parité révise après coup jack ↔ footswitch) puis sur le nombre de footswitches du meilleur chemin de parité (`fscum`, retenu) |

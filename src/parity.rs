@@ -833,6 +833,30 @@ pub fn analyze(layout: &Layout, rows: &mut [Row]) -> Option<f32> {
     Some(total)
 }
 
+/// Whether the step from `initial` to `cols` on `row` is a footswitch as counted by
+/// [`TechCounts::from_rows`]: an up or down panel of the previous row (`prev_notes`)
+/// hit again by the other foot less than `FOOTSWITCH_CUTOFF` seconds later. Not
+/// upstream: lets the generator see footswitches while it builds a chart.
+pub fn is_footswitch(
+    layout: &Layout,
+    initial: &State,
+    prev_notes: u16,
+    row: &Row,
+    cols: &Placement,
+    elapsed: f32,
+) -> bool {
+    elapsed < FOOTSWITCH_CUTOFF
+        && layout.up.iter().chain(&layout.down).any(|&c| {
+            let (prev, cur) = (initial.combined[c], cols[c]);
+            row.notes[c]
+                && prev_notes & (1 << c) != 0
+                && cur != Foot::None
+                && prev != Foot::None
+                && prev != cur
+                && prev.other_part() != cur
+        })
+}
+
 /// Tech counts, as displayed by the game (`TechCounts::CalculateTechCountsFromRows`).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TechCounts {
@@ -1016,6 +1040,30 @@ mod tests {
     fn fast_same_arrow_twice_is_footswitch_or_jack() {
         let (tc, _) = counts("L D U U R", 0.12);
         assert_eq!(tc.footswitches + tc.jacks, 1, "{tc:?}");
+    }
+
+    #[test]
+    fn is_footswitch_agrees_with_tech_counts() {
+        let layout = Layout::dance_single();
+        for (p, interval) in [
+            ("L D U U R", 0.12),
+            ("L D D R U U L D D", 0.12),
+            ("L U U D D R", 0.25),
+            ("L U U D D R", 0.35),
+            ("L D U R L U D R", 0.15),
+        ] {
+            let (tc, rows) = counts(p, interval);
+            let found = rows
+                .windows(2)
+                .filter(|w| {
+                    let mut initial = State::beginning();
+                    initial.combined = w[0].columns;
+                    let elapsed = w[1].second - w[0].second;
+                    is_footswitch(&layout, &initial, w[0].note_mask, &w[1], &w[1].columns, elapsed)
+                })
+                .count();
+            assert_eq!(found as u32, tc.footswitches, "{p} {tc:?}");
+        }
     }
 
     #[test]

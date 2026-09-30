@@ -30,6 +30,10 @@ pub struct GenOptions {
     pub repeat_bonus: f64,
     /// Minimum cosine similarity for two measures to count as a repetition.
     pub repeat_similarity: f64,
+    /// Penalty (nats) for an arrow whose cheapest parity makes a footswitch (as the
+    /// game's tech counts define it), on top of the parity cost; see
+    /// [`footswitch_penalty`] for its scaling per difficulty.
+    pub footswitch_penalty: f64,
 }
 
 impl Default for GenOptions {
@@ -40,6 +44,7 @@ impl Default for GenOptions {
             temperature: 0.4,
             repeat_bonus: 1.5,
             repeat_similarity: 0.9,
+            footswitch_penalty: 0.0,
         }
     }
 }
@@ -535,8 +540,9 @@ const JUMPS: [u8; 6] = [0b1001, 0b0011, 0b0101, 0b1010, 0b1100, 0b0110];
 
 struct Hyp {
     score: f64,
-    /// Reachable parity states with their accumulated cost (pruned).
-    frontier: Vec<(State, f32)>,
+    /// Reachable parity states with their accumulated cost and the number of
+    /// footswitches on their cheapest path (pruned, cheapest first).
+    frontier: Vec<(State, f32, u32)>,
     p3: u8,
     p2: u8,
     p1: u8,
@@ -545,12 +551,19 @@ struct Hyp {
 }
 
 /// Picks the arrows of every note.
+/// Footswitch penalty (nats) of the arrow search for difficulty `d`.
+pub fn footswitch_penalty(_model: &Model, _d: Difficulty, opts: &GenOptions) -> f64 {
+    opts.footswitch_penalty
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn select_arrows(
     notes: &[Note],
     grid: &Grid,
     table: &ProbTable,
     repeats: &[Option<usize>],
     opts: &GenOptions,
+    fs_penalty: f64,
     rng: &mut ChaCha8Rng,
 ) -> Vec<u8> {
     let layout = Layout::dance_single();
@@ -558,7 +571,7 @@ pub fn select_arrows(
     let mut arena: Vec<(usize, u8)> = Vec::new();
     let mut beam = vec![Hyp {
         score: 0.0,
-        frontier: vec![(State::beginning(), 0.0)],
+        frontier: vec![(State::beginning(), 0.0, 0)],
         p3: 0,
         p2: 0,
         p1: 0,
@@ -585,7 +598,7 @@ pub fn select_arrows(
                 }
                 arena[node].1
             });
-            let base_cost = h.frontier.iter().map(|f| f.1).fold(f32::MAX, f32::min);
+            let (base_cost, base_fs) = (h.frontier[0].1, h.frontier[0].2);
             for &m in masks {
                 let mut row = Row::new(4, beat as f32, second);
                 for c in 0..4 {
@@ -593,24 +606,31 @@ pub fn select_arrows(
                         row.add_note(c);
                     }
                 }
-                let mut frontier: Vec<(State, f32)> = Vec::new();
+                let mut frontier: Vec<(State, f32, u32)> = Vec::new();
                 let mut index: HashMap<u64, usize> = HashMap::new();
-                for (st, cost) in &h.frontier {
+                // Arrows of the previous row (none before the first one).
+                let prev_notes = if i == 0 { 0 } else { h.p1 as u16 };
+                for (st, cost, fs_count) in &h.frontier {
                     // As upstream: the node before the first row is one second earlier.
                     let elapsed = prev_row.as_ref().map_or(1.0, |p| second - p.second);
                     for p in layout.placements(row.note_mask, row.hold_mask) {
                         let ns = State::result(st, &row, p);
                         let c =
                             cost + parity::action_cost(&layout, st, &ns, &row, prev_row.as_ref(), p, elapsed);
+                        let fs = fs_count
+                            + (fs_penalty != 0.0
+                                && parity::is_footswitch(&layout, st, prev_notes, &row, p, elapsed))
+                                as u32;
                         match index.get(&ns.key()) {
                             Some(&k) => {
                                 if c < frontier[k].1 {
                                     frontier[k].1 = c;
+                                    frontier[k].2 = fs;
                                 }
                             }
                             None => {
                                 index.insert(ns.key(), frontier.len());
-                                frontier.push((ns, c));
+                                frontier.push((ns, c, fs));
                             }
                         }
                     }
@@ -621,6 +641,9 @@ pub fn select_arrows(
                 frontier.sort_by(|a, b| a.1.total_cmp(&b.1));
                 frontier.truncate(FRONTIER);
                 let parity_delta = (frontier[0].1 - base_cost) as f64;
+                // Footswitches gained (or lost, when the cheapest path is revised) by the
+                // cheapest parity path: the game counts those of the cheapest path.
+                let fs_delta = frontier[0].2 as f64 - base_fs as f64;
                 let u: f64 = rng.gen_range(1e-12..1.0);
                 let gumbel = -(-u.ln()).ln();
                 let bonus = if reference == Some(m) {
@@ -631,7 +654,8 @@ pub fn select_arrows(
                 let score = h.score + table.logp(gap, h.p3, h.p2, h.p1, m) as f64
                     - opts.parity_weight * parity_delta
                     + opts.temperature * gumbel
-                    + bonus;
+                    + bonus
+                    - fs_penalty * fs_delta;
                 arena.push((h.node, m));
                 next.push(Hyp {
                     score,
@@ -814,7 +838,8 @@ pub fn generate_for_meter(
     let (density, notes, mut rng) = best;
     let repeats = find_repeats(a, &notes, opts.repeat_similarity);
     let table = model.table(style);
-    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, &mut rng);
+    let fs_penalty = footswitch_penalty(model, style, opts);
+    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, fs_penalty, &mut rng);
     let rows = to_rows(&notes, &masks);
     let written = model.meter_for_density(density);
     OutChart {
@@ -832,7 +857,8 @@ pub fn generate(a: &SongAnalysis, model: &Model, d: Difficulty, seed: u64, opts:
     let notes = place_notes(a, model, d, &mut rng);
     let repeats = find_repeats(a, &notes, opts.repeat_similarity);
     let table = model.table(d);
-    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, &mut rng);
+    let fs_penalty = footswitch_penalty(model, d, opts);
+    let masks = select_arrows(&notes, &a.grid, &table, &repeats, opts, fs_penalty, &mut rng);
     let rows = to_rows(&notes, &masks);
     let meter = estimate_meter(&rows, &a.grid, model, d);
     OutChart {

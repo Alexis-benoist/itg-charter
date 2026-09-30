@@ -18,7 +18,7 @@
 //! Summary written to `eval/patterns-<TAG>.txt` (default tag: the style).
 //!
 //! Usage: cargo run --release --example eval_patterns -- SONGS_DIR [--style S] [--max N]
-//!        [--temperature T] [--parity-weight W] [--repeat-bonus B] [--beam-width N] [--tag TAG]
+//!        [--temperature T] [--parity-weight W] [--repeat-bonus B] [--footswitch-penalty P] [--beam-width N] [--tag TAG]
 
 use clap::ValueEnum;
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
@@ -131,7 +131,7 @@ fn patterns(seq: &[(u8, u32)]) -> [f64; NF] {
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = "usage: eval_patterns SONGS_DIR [--style S] [--max N] [--temperature T] \
-                 [--parity-weight W] [--repeat-bonus B] [--beam-width N] [--tag TAG]";
+                 [--parity-weight W] [--repeat-bonus B] [--footswitch-penalty P] [--beam-width N] [--tag TAG]";
     let dir = PathBuf::from(args.first().expect(usage));
     let opt = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1));
     let style = opt("--style")
@@ -148,6 +148,9 @@ fn main() -> anyhow::Result<()> {
     }
     if let Some(b) = num("--repeat-bonus")? {
         gen_opts.repeat_bonus = b;
+    }
+    if let Some(p) = num("--footswitch-penalty")? {
+        gen_opts.footswitch_penalty = p;
     }
     if let Some(w) = num("--beam-width")? {
         gen_opts.beam_width = w as usize;

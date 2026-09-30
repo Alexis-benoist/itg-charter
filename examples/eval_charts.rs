@@ -9,7 +9,7 @@
 //!
 //! Usage: cargo run --release --example eval_charts -- SONGS_DIR [MAX_SONGS]
 //!        [parity_weight temperature repeat_bonus]   (to tune `GenOptions`)
-//!        [--style S] [--tag TAG]
+//!        [--style S] [--footswitch-penalty P] [--tag TAG]
 
 use clap::ValueEnum;
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
@@ -48,6 +48,9 @@ fn main() -> anyhow::Result<()> {
         None => (Model::embedded()?, GenOptions::default()),
     };
     let tag = opt("--tag");
+    if let Some(p) = opt("--footswitch-penalty") {
+        gen_opts.footswitch_penalty = p.parse()?;
+    }
     if let [pw, t, rb] = &args.get(2..5).unwrap_or(&[]) {
         gen_opts.parity_weight = pw.parse()?;
         gen_opts.temperature = t.parse()?;
