@@ -13,9 +13,12 @@
 //!
 //! Per difficulty: our median against the human p10–p50–p90.
 //!
-//! Summary written to `eval/patterns-<STYLE>.txt`.
+//! The generation options of the style can be overridden to tune them.
+//!
+//! Summary written to `eval/patterns-<TAG>.txt` (default tag: the style).
 //!
 //! Usage: cargo run --release --example eval_patterns -- SONGS_DIR [--style S] [--max N]
+//!        [--temperature T] [--parity-weight W] [--repeat-bonus B] [--beam-width N] [--tag TAG]
 
 use clap::ValueEnum;
 use itg_charter::analysis::{AnalysisOptions, SongAnalysis};
@@ -127,14 +130,29 @@ fn patterns(seq: &[(u8, u32)]) -> [f64; NF] {
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let usage = "usage: eval_patterns SONGS_DIR [--style S] [--max N]";
+    let usage = "usage: eval_patterns SONGS_DIR [--style S] [--max N] [--temperature T] \
+                 [--parity-weight W] [--repeat-bonus B] [--beam-width N] [--tag TAG]";
     let dir = PathBuf::from(args.first().expect(usage));
     let opt = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1));
     let style = opt("--style")
         .map_or(Ok(Style::default()), |s| Style::from_str(s, true))
         .map_err(anyhow::Error::msg)?;
     let max: usize = opt("--max").and_then(|m| m.parse().ok()).unwrap_or(40);
-    let (model, gen_opts) = (style.model()?, style.gen_options());
+    let (model, mut gen_opts) = (style.model()?, style.gen_options());
+    let num = |k: &str| opt(k).map(|v| v.parse::<f64>()).transpose();
+    if let Some(t) = num("--temperature")? {
+        gen_opts.temperature = t;
+    }
+    if let Some(w) = num("--parity-weight")? {
+        gen_opts.parity_weight = w;
+    }
+    if let Some(b) = num("--repeat-bonus")? {
+        gen_opts.repeat_bonus = b;
+    }
+    if let Some(w) = num("--beam-width")? {
+        gen_opts.beam_width = w as usize;
+    }
+    let tag = opt("--tag").cloned().unwrap_or_else(|| style.name().to_string());
     let layout = Layout::dance_single();
 
     // Human charts, and the audio files of the songs.
@@ -208,7 +226,7 @@ fn main() -> anyhow::Result<()> {
     let mut report = String::new();
     writeln!(
         report,
-        "{} --style {}: {} songs generated",
+        "{} --style {}: {} songs generated, {gen_opts:?}",
         dir.display(),
         style.name(),
         picked.len()
@@ -241,7 +259,7 @@ fn main() -> anyhow::Result<()> {
     writeln!(report, "outside human range: {flags}")?;
     print!("{report}");
     std::fs::write(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("eval/patterns-{}.txt", style.name())),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("eval/patterns-{tag}.txt")),
         &report,
     )?;
     Ok(())

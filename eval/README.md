@@ -38,3 +38,5 @@ histogramme appris : 84,5 % / 87,0 % — meilleur sur train (132 / 0,8) : 86,5 %
 | `context-{classic,stream,tech}.txt` | information des lignes précédentes : bits par ligne des modèles de flèches d'ordre 1 à 5 (0 à 4 lignes précédentes) par style, courbe d'apprentissage |
 | `patterns-{classic,stream,tech}.txt` | patterns au-delà de 2 lignes (escaliers, drills, candles, runs de 16es, diversité, répétition) : nos charts vs les humains du style |
 | `patterns-*-order4.txt`, `charts-style-*-order4.txt`, `perplexity-test-classic-order4.txt` | modèle de flèches d'ordre 4 (3 lignes précédentes, format 5) : perplexité, stats, patterns |
+| `patterns-sweep-*.txt`, `patterns-diag-*.txt` | températures 0,4 → 1,5 et bonus de répétition ; diagnostic beam / température / parité : le modèle seul échantillonné (beam 1, T 1, parité 0) est humain sur tous les patterns, la parité crée les drills |
+| `patterns-grid-*.txt`, `charts-grid-*.txt` | grille température × poids de parité (patterns + stats) ; retenu : T 0,7, parité 0,01 (tech 0,0025) |

@@ -73,7 +73,10 @@ par style, embarqué ; les deux petits groupes (gimmick, 590 charts ; Kyzentun, 
 `cargo run --release --example train_styles -- ~/itg-train` (dossier de liens vers tous les packs)
 réécrit `model/model.json` (classique) et `model/styles/*.json`. Le placement reste commun.
 
-Contrôle (`eval_charts`, 40 morceaux du style) : classique et stream 0 statistique hors de
+Réglages de génération par style : `Style::gen_options` (température 0,7 ; parité 0,01, tech
+0,0025), voir `CLAUDE.md`.
+
+Contrôle initial (`eval_charts`, 40 morceaux du style) : classique et stream 0 statistique hors de
 l'intervalle p10–p90 humain. Tech : au poids de parité par défaut (0,02) le générateur ne fait
 presque pas de crossovers (0,3 / 100 lignes en Medium, humain 4,7) ; poids balayé
 (`eval/charts-style-tech-pw*.txt`) : 0,01 → 1,9 ; **0,005 → 4,2 (retenu, 0 hors intervalle)** ;

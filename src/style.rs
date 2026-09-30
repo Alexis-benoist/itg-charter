@@ -52,18 +52,25 @@ impl Style {
         }
     }
 
-    /// Generation options of this style. The parity weight (0.02, `eval_charts`) was
-    /// calibrated on classic charts; at that weight the tech model makes 0.3 crossovers
-    /// per 100 rows where tech charters make 4.7 (Medium median). Swept with
-    /// `eval_charts` on the tech packs: 0.01 → 1.9, 0.005 → 4.2, 0 → 12.6 (above
-    /// p90).
+    /// Generation options of this style, measured with `eval_charts` and
+    /// `eval_patterns` on 40 songs of the style (`eval/*grid*`, `eval/README.md`).
+    ///
+    /// ITGmania's parity cost penalises every foot movement: at the default weight
+    /// (0.02) and temperature (0.4) the beam settles into drills (Challenge classic: 46
+    /// drill rows / 100, human median 5.4) and avoids stairs (2.9, human 7.6), while
+    /// sampling the order-4 model alone matches humans on every pattern. Temperature
+    /// 0.7 with half the parity weight keeps the patterns human (0 flag in every
+    /// style); footswitches remain slightly too frequent (Medium: 0.3 / 100, humans 0).
+    /// Tech charts need less parity still for their crossovers (weight 0.02: 0.3 / 100
+    /// in Medium, humans 4.7).
     pub fn gen_options(self) -> GenOptions {
         let parity_weight = match self {
-            Style::Classic | Style::Stream => GenOptions::default().parity_weight,
-            Style::Tech => 0.005,
+            Style::Classic | Style::Stream => 0.01,
+            Style::Tech => 0.0025,
         };
         GenOptions {
             parity_weight,
+            temperature: 0.7,
             ..GenOptions::default()
         }
     }

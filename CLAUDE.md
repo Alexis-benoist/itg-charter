@@ -82,8 +82,8 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   incrémenter `MODEL_VERSION` et réentraîner.
 - **Calibrations** mesurées, pas devinées : `ENVELOPE_LATENCY` (17 ms, via `eval_sync`) ;
   `HALF_BEAT_WEIGHTS` (via `fit_sync`) ; `TEMPO_PRIOR_*` (via `fit_octave`) ;
-  `GenOptions::default()` (via `eval_charts`) ; poids de parité du style tech (0,005, via
-  `eval_charts` sur ses packs, cf. `Style::gen_options`). Ajuster sur train, mesurer sur test, documenter.
+  `GenOptions` par style (`Style::gen_options` : température 0,7, poids de parité 0,01, tech 0,0025,
+  via `eval_charts` + `eval_patterns` sur les packs du style). Ajuster sur train, mesurer sur test, documenter.
 - **Un commit par expérience**, y compris celles qui régressent, avec les chiffres mesurés dans le
   message et le résumé `eval/*.txt` ajouté (voir `eval/README.md`).
 - **MP3** : symphonia est gapless, le jeu non ; `audio.rs` ajoute en tête le silence que le jeu joue
@@ -128,8 +128,10 @@ dans le binaire via `include_str!`), le « jouable » vient des coûts de parit�
   générées dans Songs/) de tout entraînement et de toute évaluation.
 - Charts (40 morceaux × 5 difficultés) : toutes les médianes (NPS, sauts, holds, crossovers,
   footswitches, jacks, double-steps, meter) dans l'intervalle p10–p90 humain.
-  Mais au-delà de 2 lignes (`eval_patterns`, patterns sur les runs de notes simples) : en Hard et
-  Challenge, **trop de drills** (Challenge classique : 42 lignes / 100 contre 5,4 en médiane
-  humaine, p90 18), **trop peu d'escaliers** (1,8 contre 7,6) **et de candles** (2,0 contre 6,6) ;
-  5 écarts en classique, 4 en stream, 1 en tech. Le n-gramme ne voit que 2 lignes
-  (`eval_context` : ordre 4 = −0,10 bit/ligne en classique, ordre 5 = −0,17 en stream).
+  Patterns au-delà de 2 lignes (`eval_patterns` : escaliers, drills, candles, répétition) : dans
+  l'intervalle humain pour les 3 styles, grâce au n-gramme d'ordre 4 (3 lignes précédentes,
+  `eval_context` : −0,10 bit/ligne en classique) **et** à une parité moins lourde. Le coût de
+  parité d'ITGmania pénalise tout mouvement de pied : au poids 0,02 / température 0,4 le beam fait
+  des drills (Challenge classique 46 lignes / 100, humain 5,4) et évite les escaliers (2,9 contre
+  7,6) ; le modèle seul, échantillonné, est humain sur tous les patterns. Reste : un peu trop de
+  footswitches (Medium 0,3 / 100, humains 0) — seul écart restant (classique 1, stream 2, tech 1).

@@ -1,0 +1,37 @@
+/home/alexis/itg-train-classic --style classic: 40 songs generated, GenOptions { beam_width: 12, parity_weight: 0.02, temperature: 1.5, repeat_bonus: 1.5, repeat_similarity: 0.9 }
+== Beginner (human 1708 charts, ours 40)
+      stairs/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+      drills/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+     candles/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+        16th run: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+ 4-row diversity: ours median   0.863 | human p10   0.578 p50   0.774 p90   0.902
+    8-row repeat: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.104
+== Easy (human 1867 charts, ours 40)
+      stairs/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+      drills/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+     candles/100: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+        16th run: ours median   0.000 | human p10   0.000 p50   0.000 p90   0.000
+ 4-row diversity: ours median   0.733 | human p10   0.458 p50   0.663 p90   0.796
+    8-row repeat: ours median   0.000 | human p10   0.000 p50   0.023 p90   0.136
+== Medium (human 1893 charts, ours 40)
+      stairs/100: ours median   0.289 | human p10   0.000 p50   0.424 p90   4.082
+      drills/100: ours median   1.054 | human p10   0.000 p50   0.000 p90  12.025
+     candles/100: ours median   0.838 | human p10   0.000 p50   0.604 p90   3.504
+        16th run: ours median   0.000 | human p10   0.000 p50   0.000 p90   2.500
+ 4-row diversity: ours median   0.641 | human p10   0.346 p50   0.524 p90   0.701
+    8-row repeat: ours median   0.003 | human p10   0.006 p50   0.056 p90   0.205  <-- outside human p10-p90
+== Hard (human 1950 charts, ours 40)
+      stairs/100: ours median   1.929 | human p10   1.059 p50   4.054 p90   8.263
+      drills/100: ours median   6.284 | human p10   0.000 p50   2.857 p90  13.673
+     candles/100: ours median   3.110 | human p10   1.114 p50   4.321 p90   8.333
+        16th run: ours median   2.500 | human p10   0.000 p50   2.375 p90   4.786
+ 4-row diversity: ours median   0.569 | human p10   0.261 p50   0.432 p90   0.612
+    8-row repeat: ours median   0.004 | human p10   0.015 p50   0.082 p90   0.290  <-- outside human p10-p90
+== Challenge (human 1777 charts, ours 40)
+      stairs/100: ours median   2.425 | human p10   3.438 p50   7.559 p90  12.500  <-- outside human p10-p90
+      drills/100: ours median  13.485 | human p10   0.000 p50   5.446 p90  18.133
+     candles/100: ours median   3.506 | human p10   2.355 p50   6.582 p90  11.776
+        16th run: ours median   3.185 | human p10   2.368 p50   3.560 p90   8.724
+ 4-row diversity: ours median   0.505 | human p10   0.193 p50   0.362 p90   0.555
+    8-row repeat: ours median   0.006 | human p10   0.023 p50   0.132 p90   0.396  <-- outside human p10-p90
+outside human range: 4
