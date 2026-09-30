@@ -1,0 +1,5 @@
+test split of /home/alexis/itg-train-stream: 3795 charts, 1538851 rows; uniform over the 15 masks = 3.907 bits
+bits per row | Beginner | Easy | Medium | Hard | Challenge | all      | trained on
+             |     1.613 |     1.637 |     1.620 |     1.646 |     1.657 |    1.642 | /home/alexis/itg-train-stream train 1/1 (868 simfiles, 4025 charts)
+             |     1.615 |     1.643 |     1.639 |     1.661 |     1.662 |    1.652 | /home/alexis/itg-train train 1/1 (2281 simfiles, 9733 charts)
+             |     1.694 |     1.705 |     1.662 |     1.684 |     1.694 |    1.686 | embedded model (all songs, test split included)
