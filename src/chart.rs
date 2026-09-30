@@ -550,12 +550,15 @@ struct Hyp {
     node: usize,
 }
 
-/// Picks the arrows of every note.
-/// Footswitch penalty (nats) of the arrow search for difficulty `d`.
-pub fn footswitch_penalty(_model: &Model, _d: Difficulty, opts: &GenOptions) -> f64 {
-    opts.footswitch_penalty
+/// Footswitch penalty (nats) of the arrow search for difficulty `d`: the base penalty of
+/// the options, divided by 1 + the human p90 of footswitches per 100 rows in `d`. Full
+/// where humans (almost) never footswitch (p90 0: Beginner to Medium), about a half in
+/// Hard and a third in Challenge, where they do.
+pub fn footswitch_penalty(model: &Model, d: Difficulty, opts: &GenOptions) -> f64 {
+    opts.footswitch_penalty / (1.0 + model.stats(d).footswitches.p90)
 }
 
+/// Picks the arrows of every note.
 #[allow(clippy::too_many_arguments)]
 pub fn select_arrows(
     notes: &[Note],
