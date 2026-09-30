@@ -31,8 +31,9 @@ pub const BPM_PRIOR_OCTAVES: f64 = 2.5;
 /// can be tuned without retraining). Chosen with `examples/eval_sync.rs`.
 pub const BPM_PRIOR_SIGMA_BINS: f64 = 12.0;
 
-/// The model shipped with the binary (trained on the ITGmania songs available at build time).
-pub const EMBEDDED: &str = include_str!("../model/model.json");
+/// The model shipped with the binary (`model/model.json`, the classic style), packed by
+/// `build.rs`; read with [`Model::from_packed`].
+pub const EMBEDDED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/model.bin"));
 
 /// Bucket of the time gap between two rows, in 48ths of a beat.
 pub fn gap_bucket(gap48: u32) -> usize {
@@ -124,10 +125,13 @@ pub struct Model {
     pub version: u32,
     pub stats: Vec<DiffStats>,
     /// Counts indexed by [difficulty][gap bucket][row-2][row-1][row], rows as masks (0 = start).
+    /// (`default`: absent from the JSON part of a packed model, see [`Model::from_packed`].)
+    #[serde(default)]
     pub ngram: Vec<u32>,
     /// Sparse counts with one more row of context, (index, count) sorted by index, index
     /// [difficulty][gap bucket][row-3][row-2][row-1][row]: the order-4 model, which backs
     /// off to `ngram` (`eval_context`: −0.10 bit per row on classic charts).
+    #[serde(default)]
     pub ngram4: Vec<(u32, u32)>,
     /// meter ≈ intercept + slope × (75th percentile of per-measure rows per second).
     pub meter_intercept: f64,
@@ -347,15 +351,56 @@ pub fn find_simfiles(dir: &Path) -> Vec<PathBuf> {
 
 impl Model {
     pub fn embedded() -> Result<Model> {
-        Model::from_json(EMBEDDED)
+        Model::from_packed(EMBEDDED)
     }
 
     pub fn from_json(text: &str) -> Result<Model> {
-        let m: Model = serde_json::from_str(text).context("parsing model")?;
+        Model::checked(serde_json::from_str(text).context("parsing model")?)
+    }
+
+    /// Reads a model packed by `build.rs`: the deflate of the `ngram` counts (varints), the
+    /// `ngram4` entries (varint index deltas and counts) and the other fields as JSON.
+    pub fn from_packed(bytes: &[u8]) -> Result<Model> {
+        let raw = miniz_oxide::inflate::decompress_to_vec(bytes)
+            .map_err(|e| anyhow::anyhow!("inflating packed model: {e:?}"))?;
+        let mut pos = 0;
+        let mut varint = || -> Result<u64> {
+            let mut n = 0u64;
+            for shift in (0..64).step_by(7) {
+                let b = *raw.get(pos).context("truncated packed model")?;
+                pos += 1;
+                n |= ((b & 0x7f) as u64) << shift;
+                if b & 0x80 == 0 {
+                    return Ok(n);
+                }
+            }
+            anyhow::bail!("bad varint in packed model")
+        };
+        let ngram = (0..varint()?)
+            .map(|_| Ok(varint()? as u32))
+            .collect::<Result<Vec<_>>>()?;
+        let mut index = 0u64;
+        let ngram4 = (0..varint()?)
+            .map(|_| {
+                index += varint()?;
+                Ok((index as u32, varint()? as u32))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut m: Model = serde_json::from_slice(&raw[pos..]).context("parsing packed model")?;
+        (m.ngram, m.ngram4) = (ngram, ngram4);
+        Model::checked(m)
+    }
+
+    fn checked(m: Model) -> Result<Model> {
         anyhow::ensure!(
             m.version == MODEL_VERSION,
             "model version {} unsupported",
             m.version
+        );
+        anyhow::ensure!(
+            m.ngram.len() == NDIFF * GAP_BUCKETS * MASKS * MASKS * MASKS,
+            "model n-gram has {} counts",
+            m.ngram.len()
         );
         Ok(m)
     }

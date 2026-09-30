@@ -44,11 +44,12 @@ impl Style {
         }
     }
 
-    fn json(self) -> &'static str {
+    /// The model, packed by `build.rs` from [`Style::model_path`].
+    fn packed(self) -> &'static [u8] {
         match self {
             Style::Classic => model::EMBEDDED,
-            Style::Stream => include_str!("../model/styles/stream.json"),
-            Style::Tech => include_str!("../model/styles/tech.json"),
+            Style::Stream => include_bytes!(concat!(env!("OUT_DIR"), "/stream.bin")),
+            Style::Tech => include_bytes!(concat!(env!("OUT_DIR"), "/tech.bin")),
         }
     }
 
@@ -77,7 +78,7 @@ impl Style {
 
     /// The embedded model of this style.
     pub fn model(self) -> Result<Model> {
-        Model::from_json(self.json())
+        Model::from_packed(self.packed())
     }
 }
 
@@ -101,6 +102,12 @@ mod tests {
             Style::default().model().unwrap().to_json(),
             Model::embedded().unwrap().to_json()
         );
+        // The packed models are the JSON files, exactly.
+        for (style, m) in Style::ALL.iter().zip(&models) {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(style.model_path());
+            let json = Model::from_json(&std::fs::read_to_string(path).unwrap()).unwrap();
+            assert!(json == *m, "{} differs from its JSON", style.name());
+        }
         // The habits that tell the styles apart (see training/STYLES.md).
         let xo = |m: &Model| m.stats(Difficulty::Hard).crossovers.p50;
         let jumps = |m: &Model| m.stats(Difficulty::Hard).jump_ratio.p50;

@@ -64,7 +64,9 @@ Principe : **aucune règle de pattern inventée à la main**. Le « naturel » v
 `model/styles/{stream,tech}.json` ; packs de chaque style dans `training/styles.tsv`, reconstruits
 par `cargo run --release --example train_styles -- ~/itg-train`, voir `training/STYLES.md` ;
 `model/placement.json`, commun, est ajusté sur tout le corpus élargi de 19 321 charts —, embarqués
-dans le binaire via `include_str!`), le « jouable » vient des coûts de parité d'ITGmania.
+dans le binaire — les JSON de `model/` restent la source ; `build.rs` les compacte à la compilation
+(varints, deltas, deflate : 3,6 Mo → 0,34 Mo, binaire 5,5 Mo), relus par `Model::from_packed`) ;
+le « jouable » vient des coûts de parité d'ITGmania.
 
 ## Règles à respecter
 
