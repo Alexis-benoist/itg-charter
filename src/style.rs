@@ -61,9 +61,17 @@ impl Style {
     /// drill rows / 100, human median 5.4) and avoids stairs (2.9, human 7.6), while
     /// sampling the order-4 model alone matches humans on every pattern. Temperature
     /// 0.7 with half the parity weight keeps the patterns human (0 flag in every
-    /// style); footswitches remain slightly too frequent (Medium: 0.3 / 100, humans 0).
+    /// style), but lets footswitches through (Medium: 0.3 / 100, humans 0 in every
+    /// style; stream Hard 0.97, human p90 0.94; tech Hard 1.28, p90 1.14).
     /// Tech charts need less parity still for their crossovers (weight 0.02: 0.3 / 100
     /// in Medium, humans 4.7).
+    ///
+    /// Hence a separate footswitch penalty (see [`crate::chart::footswitch_penalty`]):
+    /// 2 nats, divided by 1 + the human footswitch p90 of the difficulty. Medium falls
+    /// to 0 footswitch in every style, Hard / Challenge stay between the human p50 and
+    /// p90 (classic 0.33 / 0.67, stream 0.27 / 0.69, tech 0.40 / 0.97), the patterns
+    /// stay human (0 flag; a base of 4 pushes classic Challenge drills just out of the
+    /// human range) and so do crossovers (`eval/*fsp90*`).
     pub fn gen_options(self) -> GenOptions {
         let parity_weight = match self {
             Style::Classic | Style::Stream => 0.01,
@@ -72,6 +80,7 @@ impl Style {
         GenOptions {
             parity_weight,
             temperature: 0.7,
+            footswitch_penalty: 2.0,
             ..GenOptions::default()
         }
     }

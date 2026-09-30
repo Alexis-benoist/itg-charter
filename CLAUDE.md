@@ -27,7 +27,7 @@ itg-charter train <Songs/>              # entraîne un modèle sur un dossier
     `target/eval/`, résumé versionné dans `eval/` ;
   - `fit_sync` / `fit_octave` (sur les CSV d'`eval_sync --split train`) — recalibrent les poids du
     demi-temps et le prior de tempo ; toujours rapporter le score sur le split **test** ;
-  - `cargo run --release --example eval_charts -- $SONGS 40 [parity_weight temperature repeat_bonus]` —
+  - `cargo run --release --example eval_charts -- $SONGS 40 [parity_weight temperature repeat_bonus] [--style S] [--footswitch-penalty P] [--tag T]` —
     stats des charts générés vs distribution humaine (objectif : `outside human range: 0`) ;
   - `cargo run --release --example eval_placement -- $SONGS --max 300 --split test [--tag T]` —
     nos lignes tombent-elles là où l'humain les met (grille humaine imposée) : précision / rappel /
@@ -85,7 +85,8 @@ le « jouable » vient des coûts de parité d'ITGmania.
 - **Calibrations** mesurées, pas devinées : `ENVELOPE_LATENCY` (17 ms, via `eval_sync`) ;
   `HALF_BEAT_WEIGHTS` (via `fit_sync`) ; `TEMPO_PRIOR_*` (via `fit_octave`) ;
   `GenOptions` par style (`Style::gen_options` : température 0,7, poids de parité 0,01, tech 0,0025,
-  via `eval_charts` + `eval_patterns` sur les packs du style). Ajuster sur train, mesurer sur test, documenter.
+  pénalité de footswitch 2 nats / (1 + p90 humain), via `eval_charts --style` + `eval_patterns`
+  sur les packs du style). Ajuster sur train, mesurer sur test, documenter.
 - **Un commit par expérience**, y compris celles qui régressent, avec les chiffres mesurés dans le
   message et le résumé `eval/*.txt` ajouté (voir `eval/README.md`).
 - **MP3** : symphonia est gapless, le jeu non ; `audio.rs` ajoute en tête le silence que le jeu joue
@@ -135,5 +136,9 @@ le « jouable » vient des coûts de parité d'ITGmania.
   `eval_context` : −0,10 bit/ligne en classique) **et** à une parité moins lourde. Le coût de
   parité d'ITGmania pénalise tout mouvement de pied : au poids 0,02 / température 0,4 le beam fait
   des drills (Challenge classique 46 lignes / 100, humain 5,4) et évite les escaliers (2,9 contre
-  7,6) ; le modèle seul, échantillonné, est humain sur tous les patterns. Reste : un peu trop de
-  footswitches (Medium 0,3 / 100, humains 0) — seul écart restant (classique 1, stream 2, tech 1).
+  7,6) ; le modèle seul, échantillonné, est humain sur tous les patterns. La parité allégée
+  laissait passer des footswitches (Medium 0,3 / 100, humains 0) : une pénalité à part
+  (`footswitch_penalty`, sur le nombre de footswitches du meilleur chemin de parité, divisée par
+  1 + p90 humain de la difficulté) les ramène à 0 en Medium et entre p50 et p90 humains en
+  Hard / Challenge. `eval_charts --style` et `eval_patterns` : `outside human range: 0` pour les
+  3 styles (`eval/charts-style-*-fs.txt`, `eval/patterns-{classic,stream,tech}.txt`).
